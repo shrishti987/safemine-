@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Wifi,
   WifiOff,
@@ -69,6 +70,17 @@ const networkNodes = [
 ];
 
 function Network() {
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState("Just now");
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+      setLastRefreshed("Just now");
+    }, 900);
+  };
+
   return (
     <div className="mx-auto max-w-[1700px] space-y-5">
 
@@ -88,10 +100,20 @@ function Network() {
           </p>
         </div>
 
-        <button className="flex w-fit items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-2.5 text-[10px] font-medium text-slate-400 transition hover:bg-white/[0.04] hover:text-white">
-          <RefreshCw size={13} />
-          Refresh Network
-        </button>
+        <div className="flex flex-col items-end gap-1.5">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex w-fit items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-2.5 text-[10px] font-medium text-slate-400 transition hover:bg-white/[0.04] hover:text-white disabled:opacity-60"
+          >
+            <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
+            {refreshing ? "Refreshing..." : "Refresh Network"}
+          </button>
+
+          <span className="text-[9px] text-slate-600">
+            Last refreshed: {lastRefreshed}
+          </span>
+        </div>
       </div>
 
       {/* NETWORK STATS */}
