@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   Search,
   Filter,
@@ -19,6 +20,25 @@ const workers = [
 ];
 
 function Workers() {
+  const [query, setQuery] = useState("");
+  const [atRiskOnly, setAtRiskOnly] = useState(false);
+
+  const filteredWorkers = useMemo(() => {
+    const search = query.trim().toLowerCase();
+
+    return workers.filter((worker) => {
+      const matchesSearch =
+        !search ||
+        worker.name.toLowerCase().includes(search) ||
+        worker.id.toLowerCase().includes(search) ||
+        worker.zone.toLowerCase().includes(search);
+
+      const matchesRisk = !atRiskOnly || worker.status !== "Safe";
+
+      return matchesSearch && matchesRisk;
+    });
+  }, [query, atRiskOnly]);
+
   return (
     <div className="mx-auto max-w-[1700px] space-y-5">
       <div>
@@ -55,14 +75,23 @@ function Workers() {
           <div className="flex h-10 max-w-sm items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.02] px-3">
             <Search size={15} className="text-slate-500" />
             <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder="Search worker..."
               className="w-full bg-transparent text-xs text-white outline-none placeholder:text-slate-600"
             />
           </div>
 
-          <button className="flex items-center gap-2 rounded-xl border border-white/[0.07] px-3 py-2.5 text-xs text-slate-400 hover:bg-white/[0.04]">
+          <button
+            onClick={() => setAtRiskOnly((current) => !current)}
+            className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs transition ${
+              atRiskOnly
+                ? "border-amber-400/30 bg-amber-400/10 text-amber-400"
+                : "border-white/[0.07] text-slate-400 hover:bg-white/[0.04]"
+            }`}
+          >
             <Filter size={14} />
-            Filter
+            {atRiskOnly ? "At Risk Only" : "Filter"}
           </button>
         </div>
 
@@ -79,7 +108,15 @@ function Workers() {
             </thead>
 
             <tbody>
-              {workers.map((worker) => {
+              {filteredWorkers.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-5 py-8 text-center text-xs text-slate-600">
+                    No workers match your search.
+                  </td>
+                </tr>
+              )}
+
+              {filteredWorkers.map((worker) => {
                 const critical = worker.status === "Critical";
                 const warning = worker.status === "Warning";
 
