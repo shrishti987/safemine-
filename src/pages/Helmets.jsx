@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   HardHat,
   BatteryMedium,
@@ -87,6 +88,24 @@ const helmets = [
 ];
 
 function Helmets() {
+  const [query, setQuery] = useState("");
+
+  const filteredHelmets = useMemo(() => {
+    const search = query.trim().toLowerCase();
+
+    if (!search) {
+      return helmets;
+    }
+
+    return helmets.filter(
+      (helmet) =>
+        helmet.id.toLowerCase().includes(search) ||
+        helmet.worker.toLowerCase().includes(search) ||
+        helmet.workerId.toLowerCase().includes(search) ||
+        helmet.zone.toLowerCase().includes(search)
+    );
+  }, [query]);
+
   return (
     <div className="mx-auto max-w-[1700px] space-y-5">
 
@@ -191,6 +210,8 @@ function Helmets() {
 
           <input
             type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder="Search helmet or worker..."
             className="w-full bg-transparent text-xs text-white outline-none placeholder:text-slate-600"
           />
@@ -198,9 +219,15 @@ function Helmets() {
       </div>
 
       {/* HELMET GRID */}
+      {filteredHelmets.length === 0 && (
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-8 text-center text-xs text-slate-600">
+          No helmets match your search.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
 
-        {helmets.map((helmet) => {
+        {filteredHelmets.map((helmet) => {
           const critical = helmet.status === "Critical";
           const warning = helmet.status === "Warning";
 

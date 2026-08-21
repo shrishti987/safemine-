@@ -1,12 +1,22 @@
+import { useState } from "react";
 import {
   Route,
   Navigation,
   ShieldAlert,
   ArrowRight,
   CheckCircle2,
+  Megaphone,
 } from "lucide-react";
 
 function Evacuation() {
+  const [evacuationActive, setEvacuationActive] = useState(false);
+  const [routeBroadcasted, setRouteBroadcasted] = useState(false);
+
+  const handleBroadcast = () => {
+    setRouteBroadcasted(true);
+    setTimeout(() => setRouteBroadcasted(false), 2500);
+  };
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
       <div>
@@ -39,12 +49,24 @@ function Evacuation() {
             </h2>
 
             <p className="mt-1 text-[10px] text-slate-500">
-              SafeMine AI has calculated the safest evacuation route.
+              {evacuationActive
+                ? "Evacuation in progress — all Zone C workers are being routed to the surface."
+                : "SafeMine AI has calculated the safest evacuation route."}
             </p>
           </div>
 
-          <button className="rounded-xl bg-red-500 px-5 py-3 text-xs font-bold text-white hover:bg-red-400">
-            Start Evacuation
+          <button
+            onClick={() => setEvacuationActive((current) => !current)}
+            className={`flex items-center gap-2 rounded-xl px-5 py-3 text-xs font-bold transition ${
+              evacuationActive
+                ? "bg-emerald-500 text-white hover:bg-emerald-400"
+                : "bg-red-500 text-white hover:bg-red-400"
+            }`}
+          >
+            {evacuationActive && (
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+            )}
+            {evacuationActive ? "Evacuation Active" : "Start Evacuation"}
           </button>
         </div>
       </div>
@@ -127,9 +149,26 @@ function Evacuation() {
             </div>
           </div>
 
-          <button className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.07] py-3 text-xs text-slate-300 hover:bg-white/[0.04]">
-            Broadcast Route
-            <ArrowRight size={14} />
+          <button
+            onClick={handleBroadcast}
+            disabled={routeBroadcasted}
+            className={`mt-4 flex w-full items-center justify-center gap-2 rounded-xl border py-3 text-xs transition ${
+              routeBroadcasted
+                ? "border-emerald-400/30 bg-emerald-400/[0.06] text-emerald-400"
+                : "border-white/[0.07] text-slate-300 hover:bg-white/[0.04]"
+            }`}
+          >
+            {routeBroadcasted ? (
+              <>
+                <Megaphone size={14} />
+                Route Broadcasted
+              </>
+            ) : (
+              <>
+                Broadcast Route
+                <ArrowRight size={14} />
+              </>
+            )}
           </button>
         </div>
       </div>

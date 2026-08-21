@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   User,
   Bell,
@@ -15,6 +16,28 @@ import {
 } from "lucide-react";
 
 function Settings() {
+  const [notifications, setNotifications] = useState({
+    critical: true,
+    email: true,
+    mobile: true,
+    maintenance: true,
+  });
+
+  const [theme, setTheme] = useState("dark");
+  const [saved, setSaved] = useState(false);
+
+  const toggleNotification = (key) => {
+    setNotifications((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
+
+  const handleSave = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-5">
 
@@ -145,28 +168,32 @@ function Settings() {
               icon={AlertTriangle}
               title="Critical alerts"
               description="Immediately notify when a critical event occurs"
-              enabled
+              enabled={notifications.critical}
+              onToggle={() => toggleNotification("critical")}
             />
 
             <ToggleRow
               icon={Mail}
               title="Email notifications"
               description="Receive important alerts by email"
-              enabled
+              enabled={notifications.email}
+              onToggle={() => toggleNotification("email")}
             />
 
             <ToggleRow
               icon={Smartphone}
               title="Mobile notifications"
               description="Send push notifications to connected devices"
-              enabled
+              enabled={notifications.mobile}
+              onToggle={() => toggleNotification("mobile")}
             />
 
             <ToggleRow
               icon={Bell}
               title="Maintenance reminders"
               description="Notify technicians about scheduled maintenance"
-              enabled
+              enabled={notifications.maintenance}
+              onToggle={() => toggleNotification("maintenance")}
             />
 
           </div>
@@ -206,14 +233,25 @@ function Settings() {
 
               <div className="mt-2 grid grid-cols-2 gap-3">
 
-                <button className="flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/[0.06] p-3 text-left">
+                <button
+                  onClick={() => setTheme("dark")}
+                  className={`flex items-center gap-2 rounded-xl border p-3 text-left transition ${
+                    theme === "dark"
+                      ? "border-cyan-400/30 bg-cyan-400/[0.06]"
+                      : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.03]"
+                  }`}
+                >
                   <Moon
                     size={15}
-                    className="text-cyan-400"
+                    className={theme === "dark" ? "text-cyan-400" : "text-slate-500"}
                   />
 
                   <div>
-                    <p className="text-[10px] font-semibold text-white">
+                    <p
+                      className={`text-[10px] font-semibold ${
+                        theme === "dark" ? "text-white" : "text-slate-400"
+                      }`}
+                    >
                       Dark
                     </p>
 
@@ -224,14 +262,25 @@ function Settings() {
 
                 </button>
 
-                <button className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-left">
+                <button
+                  onClick={() => setTheme("system")}
+                  className={`flex items-center gap-2 rounded-xl border p-3 text-left transition ${
+                    theme === "system"
+                      ? "border-cyan-400/30 bg-cyan-400/[0.06]"
+                      : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.03]"
+                  }`}
+                >
                   <Monitor
                     size={15}
-                    className="text-slate-500"
+                    className={theme === "system" ? "text-cyan-400" : "text-slate-500"}
                   />
 
                   <div>
-                    <p className="text-[10px] font-semibold text-slate-400">
+                    <p
+                      className={`text-[10px] font-semibold ${
+                        theme === "system" ? "text-white" : "text-slate-400"
+                      }`}
+                    >
                       System
                     </p>
 
@@ -427,9 +476,12 @@ function Settings() {
           </p>
         </div>
 
-        <button className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-semibold text-[#061018] transition hover:bg-cyan-400">
-          <Save size={14} />
-          Save Changes
+        <button
+          onClick={handleSave}
+          className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-semibold text-[#061018] transition hover:bg-cyan-400"
+        >
+          {saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+          {saved ? "Saved" : "Save Changes"}
         </button>
 
       </div>
@@ -445,6 +497,7 @@ function ToggleRow({
   title,
   description,
   enabled,
+  onToggle,
 }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.015] p-3">
@@ -468,21 +521,25 @@ function ToggleRow({
 
       </div>
 
-      <div
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={onToggle}
         className={`relative h-5 w-9 rounded-full transition ${
           enabled
             ? "bg-cyan-500"
             : "bg-slate-700"
         }`}
       >
-        <div
+        <span
           className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition ${
             enabled
               ? "left-[18px]"
               : "left-0.5"
           }`}
         />
-      </div>
+      </button>
 
     </div>
   );

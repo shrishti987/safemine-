@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   Wrench,
   CheckCircle2,
@@ -63,6 +64,25 @@ const maintenanceData = [
 ];
 
 function Maintenance() {
+  const [query, setQuery] = useState("");
+
+  const filteredTasks = useMemo(() => {
+    const search = query.trim().toLowerCase();
+
+    if (!search) {
+      return maintenanceData;
+    }
+
+    return maintenanceData.filter(
+      (item) =>
+        item.id.toLowerCase().includes(search) ||
+        item.device.toLowerCase().includes(search) ||
+        item.worker.toLowerCase().includes(search) ||
+        item.issue.toLowerCase().includes(search) ||
+        item.technician.toLowerCase().includes(search)
+    );
+  }, [query]);
+
   return (
     <div className="mx-auto max-w-[1700px] space-y-5">
 
@@ -168,6 +188,8 @@ function Maintenance() {
 
           <input
             type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder="Search maintenance task..."
             className="w-full bg-transparent text-xs text-white outline-none placeholder:text-slate-600"
           />
@@ -232,7 +254,15 @@ function Maintenance() {
 
             <tbody>
 
-              {maintenanceData.map((item) => {
+              {filteredTasks.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-5 py-8 text-center text-xs text-slate-600">
+                    No maintenance tasks match your search.
+                  </td>
+                </tr>
+              )}
+
+              {filteredTasks.map((item) => {
 
                 const high = item.priority === "High";
                 const medium = item.priority === "Medium";
