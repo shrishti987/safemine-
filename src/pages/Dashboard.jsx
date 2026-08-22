@@ -12,7 +12,9 @@ import {
   AlertTriangle,
   ShieldAlert,
 } from "lucide-react";
+
 import { useMineContext } from "../context/MineDataContext";
+
 import StatCard from "../components/dashboard/StatCard";
 import RiskScore from "../components/dashboard/RiskScore";
 import MineMap from "../components/dashboard/MineMap";
@@ -20,6 +22,7 @@ import AlertPanel from "../components/dashboard/AlertPanel";
 import SensorOverview from "../components/dashboard/SensorOverview";
 import WorkerStatus from "../components/dashboard/WorkerStatus";
 import RiskChart from "../components/dashboard/RiskChart";
+
 import Badge from "../components/common/Badge";
 import Button from "../components/common/Button";
 
@@ -38,12 +41,23 @@ function Dashboard() {
     statistics,
     riskHistory,
     simulation,
+    firebase,
     startSimulation,
     stopSimulation,
     resetSimulation,
   } = useMineContext();
 
-  const hazardZone = zones.find((zone) => zone.hazardDetected);
+  // =========================================================
+  // HAZARD ZONE
+  // =========================================================
+
+  const hazardZone = zones.find(
+    (zone) => zone.hazardDetected
+  );
+
+  // =========================================================
+  // MAP WORKERS
+  // =========================================================
 
   const mapWorkers = useMemo(
     () =>
@@ -56,6 +70,10 @@ function Dashboard() {
     [workers]
   );
 
+  // =========================================================
+  // ALERT PANEL
+  // =========================================================
+
   const panelAlerts = useMemo(
     () =>
       alerts.slice(0, 4).map((alert) => ({
@@ -63,19 +81,46 @@ function Dashboard() {
         worker: alert.workerId,
         title: alert.title,
         detail: alert.message,
-        time: new Date(alert.time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }),
-        type: alert.type === "Critical" ? "critical" : "warning",
-        icon: alert.type === "Critical" ? Siren : AlertTriangle,
+        time: new Date(alert.time).toLocaleTimeString(
+          "en-IN",
+          {
+            hour: "2-digit",
+            minute: "2-digit",
+          }
+        ),
+        type:
+          alert.type === "Critical"
+            ? "critical"
+            : "warning",
+        icon:
+          alert.type === "Critical"
+            ? Siren
+            : AlertTriangle,
       })),
     [alerts]
   );
 
-  const criticalAlertCount = alerts.filter((alert) => alert.type === "Critical" && !alert.acknowledged).length;
+  // =========================================================
+  // CRITICAL ALERT COUNT
+  // =========================================================
+
+  const criticalAlertCount = alerts.filter(
+    (alert) =>
+      alert.type === "Critical" &&
+      !alert.acknowledged
+  ).length;
+
+  // =========================================================
+  // TOP RISK WORKERS
+  // =========================================================
 
   const topRiskWorkers = useMemo(
     () =>
       [...workers]
-        .sort((a, b) => b.riskScore - a.riskScore)
+        .sort(
+          (a, b) =>
+            b.riskScore - a.riskScore
+        )
         .slice(0, 4)
         .map((worker) => ({
           id: worker.id,
@@ -87,66 +132,217 @@ function Dashboard() {
     [workers]
   );
 
+  // =========================================================
+  // RISK TREND
+  // =========================================================
+
   const riskTrendData = useMemo(
-    () => riskHistory.map((point) => ({ time: point.time, risk: point.score })),
+    () =>
+      riskHistory.map((point) => ({
+        time: point.time,
+        risk: point.score,
+      })),
     [riskHistory]
   );
 
+  // =========================================================
+  // LIVE SENSOR DATA
+  // Firebase -> Dashboard
+  // =========================================================
+
   const liveSensors = useMemo(() => {
     const count = workers.length || 1;
-    const avgGas = workers.reduce((total, worker) => total + worker.gas, 0) / count;
-    const avgTemperature = workers.reduce((total, worker) => total + worker.temperature, 0) / count;
-    const avgMotion = workers.reduce((total, worker) => total + worker.motion, 0) / count;
+
+    const avgGas =
+      workers.reduce(
+        (total, worker) =>
+          total + Number(worker.gas || 0),
+        0
+      ) / count;
+
+    const avgTemperature =
+      workers.reduce(
+        (total, worker) =>
+          total +
+          Number(worker.temperature || 0),
+        0
+      ) / count;
+
+    const avgMotion =
+      workers.reduce(
+        (total, worker) =>
+          total + Number(worker.motion || 0),
+        0
+      ) / count;
+
+    // -------------------------------------------------------
+    // DIRECT FIREBASE DATA
+    // -------------------------------------------------------
+
+    const firebaseData =
+      firebase?.data || {};
+
+    // Pressure from Firebase
+    const firebasePressure = Number(
+      firebaseData.pressure
+    );
+
+    // Impact from Firebase
+    const firebaseImpact =
+      firebaseData.impact === true ||
+      firebaseData.impact === 1 ||
+      firebaseData.impact === "true";
+
+    // Gas directly from Firebase when available
+    const firebaseGas = Number(
+      firebaseData.gas
+    );
+
+    // Temperature directly from Firebase when available
+    const firebaseTemperature = Number(
+      firebaseData.temperature
+    );
+
+    // Motion directly from Firebase when available
+    const firebaseMotion =
+      typeof firebaseData.motion === "boolean"
+        ? firebaseData.motion
+          ? 1
+          : 0
+        : Number(firebaseData.motion);
+
+    // -------------------------------------------------------
+    // USE FIREBASE VALUES WHEN AVAILABLE
+    // OTHERWISE USE WORKER VALUES
+    // -------------------------------------------------------
+
+    const gasValue = Number.isFinite(
+      firebaseGas
+    )
+      ? firebaseGas
+      : avgGas;
+
+    const temperatureValue =
+      Number.isFinite(firebaseTemperature)
+        ? firebaseTemperature
+        : avgTemperature;
+
+    const motionValue =
+      Number.isFinite(firebaseMotion)
+        ? firebaseMotion
+        : avgMotion;
 
     return [
+      // =====================================================
+      // GAS
+      // =====================================================
+
       {
         name: "Gas",
-        value: avgGas.toFixed(1),
+        value: gasValue.toFixed(1),
         unit: "ppm",
-        status: avgGas > 50 ? "Elevated" : "Normal",
+        status:
+          gasValue > 50
+            ? "Elevated"
+            : "Normal",
         icon: Wind,
-        color: avgGas > 50 ? "cyan" : "emerald",
+        color:
+          gasValue > 50
+            ? "cyan"
+            : "emerald",
       },
+
+      // =====================================================
+      // TEMPERATURE
+      // =====================================================
+
       {
         name: "Temperature",
-        value: avgTemperature.toFixed(1),
+        value: temperatureValue.toFixed(1),
         unit: "°C",
-        status: avgTemperature > 38 ? "Elevated" : "Normal",
+        status:
+          temperatureValue > 38
+            ? "Elevated"
+            : "Normal",
         icon: Thermometer,
         color: "emerald",
       },
+
+      // =====================================================
+      // PRESSURE
+      // =====================================================
+
       {
         name: "Pressure",
-        value: "1.02",
-        unit: "bar",
-        status: "Stable",
+        value: Number.isFinite(
+          firebasePressure
+        )
+          ? firebasePressure.toFixed(1)
+          : "--",
+        unit: "hPa",
+        status:
+          Number.isFinite(
+            firebasePressure
+          )
+            ? "Live"
+            : "Unavailable",
         icon: Gauge,
         color: "cyan",
       },
+
+      // =====================================================
+      // MOTION
+      // =====================================================
+
       {
         name: "Motion",
-        value: avgMotion.toFixed(2),
+        value: motionValue.toFixed(2),
         unit: "g",
-        status: avgMotion > 0.5 ? "Abnormal" : "Normal",
+        status:
+          motionValue > 0.5
+            ? "Abnormal"
+            : "Normal",
         icon: Move3d,
         color: "emerald",
       },
+
+      // =====================================================
+      // IMPACT
+      // =====================================================
+
       {
         name: "Impact",
-        value: String(statistics.criticalWorkers),
-        unit: "critical",
-        status: statistics.criticalWorkers > 0 ? "Requires attention" : "No impact",
+        value: firebaseImpact
+          ? "1"
+          : "0",
+        unit: "event",
+        status: firebaseImpact
+          ? "Impact detected"
+          : "No impact",
         icon: CircleAlert,
-        color: "emerald",
+        color: firebaseImpact
+          ? "cyan"
+          : "emerald",
       },
     ];
-  }, [workers, statistics.criticalWorkers]);
+  }, [
+    workers,
+    firebase,
+  ]);
+
+  // =========================================================
+  // RENDER
+  // =========================================================
 
   return (
     <div className="mx-auto max-w-[1700px] space-y-5">
 
-      {/* PAGE HEADER + SIMULATION CONTROL */}
+      {/* =====================================================
+          PAGE HEADER + SIMULATION CONTROL
+      ===================================================== */}
+
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
             Command Center
@@ -162,103 +358,335 @@ function Dashboard() {
         </div>
 
         <div className="flex items-center gap-2">
+
           {simulation.active ? (
             <>
               <span className="flex items-center gap-1.5 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-[10px] font-semibold text-amber-400">
+
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-                Simulation running — stage {simulation.stage + 1}/{simulation.stageCount}
+
+                Simulation running — stage{" "}
+                {simulation.stage + 1}/
+                {simulation.stageCount}
+
               </span>
 
-              <Button size="sm" variant="secondary" icon={Square} onClick={stopSimulation}>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={Square}
+                onClick={stopSimulation}
+              >
                 Stop
               </Button>
 
-              <Button size="sm" variant="ghost" icon={RotateCcw} onClick={resetSimulation}>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={RotateCcw}
+                onClick={resetSimulation}
+              >
                 Reset
               </Button>
             </>
           ) : (
-            <Button size="sm" variant="danger" icon={Play} onClick={startSimulation}>
+            <Button
+              size="sm"
+              variant="danger"
+              icon={Play}
+              onClick={startSimulation}
+            >
               Start Safety Simulation
             </Button>
           )}
+
         </div>
       </div>
 
-      {/* ZONE HAZARD BANNER */}
+      {/* =====================================================
+          FIREBASE CONNECTION STATUS
+      ===================================================== */}
+
+      <div
+        className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
+          firebase?.connected
+            ? "border-emerald-400/20 bg-emerald-400/[0.05]"
+            : "border-red-400/20 bg-red-400/[0.05]"
+        }`}
+      >
+
+        <div className="flex items-center gap-2">
+
+          <span
+            className={`h-2 w-2 rounded-full ${
+              firebase?.connected
+                ? "bg-emerald-400 animate-pulse"
+                : "bg-red-400"
+            }`}
+          />
+
+          <span className="text-xs font-semibold text-white">
+            Firebase
+          </span>
+
+          <span
+            className={`text-[10px] ${
+              firebase?.connected
+                ? "text-emerald-400"
+                : "text-red-400"
+            }`}
+          >
+            {firebase?.connected
+              ? "Connected — Live Data"
+              : "Disconnected"}
+          </span>
+
+        </div>
+
+        <span className="text-[9px] text-slate-500">
+          Path: {firebase?.path || "SafeMine"}
+        </span>
+
+      </div>
+
+      {/* =====================================================
+          ZONE HAZARD BANNER
+      ===================================================== */}
+
       {hazardZone && (
         <div className="flex items-center gap-4 rounded-2xl border border-red-500/20 bg-red-500/[0.05] p-4">
+
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-400/10">
-            <ShieldAlert size={19} className="text-red-400" />
+            <ShieldAlert
+              size={19}
+              className="text-red-400"
+            />
           </div>
 
           <div>
+
             <p className="text-[10px] font-bold uppercase tracking-wider text-red-400">
               Environmental Hazard
             </p>
-            <p className="mt-0.5 text-xs font-medium text-white">{hazardZone.hazardReason}</p>
+
+            <p className="mt-0.5 text-xs font-medium text-white">
+              {hazardZone.hazardReason}
+            </p>
+
           </div>
+
         </div>
       )}
 
-      {/* STAT CARDS */}
+      {/* =====================================================
+          STAT CARDS
+      ===================================================== */}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <StatCard type="workers" title="Total Workers" value={String(statistics.totalWorkers)} subtitle="registered workers" />
-        <StatCard type="safe" title="Safe" value={String(statistics.safeWorkers)} subtitle="within normal range" />
-        <StatCard type="warning" title="At Risk" value={String(statistics.atRiskWorkers)} subtitle="require monitoring" />
-        <StatCard type="critical" title="Critical" value={String(statistics.criticalWorkers)} subtitle="immediate response" />
-        <StatCard type="alerts" title="Active Alerts" value={String(statistics.activeAlerts)} subtitle="unacknowledged" />
-        <StatCard type="zones" title="High-Risk Zones" value={String(statistics.highRiskZones)} subtitle="of 3 zones" />
+
+        <StatCard
+          type="workers"
+          title="Total Workers"
+          value={String(
+            statistics.totalWorkers
+          )}
+          subtitle="registered workers"
+        />
+
+        <StatCard
+          type="safe"
+          title="Safe"
+          value={String(
+            statistics.safeWorkers
+          )}
+          subtitle="within normal range"
+        />
+
+        <StatCard
+          type="warning"
+          title="At Risk"
+          value={String(
+            statistics.atRiskWorkers
+          )}
+          subtitle="require monitoring"
+        />
+
+        <StatCard
+          type="critical"
+          title="Critical"
+          value={String(
+            statistics.criticalWorkers
+          )}
+          subtitle="immediate response"
+        />
+
+        <StatCard
+          type="alerts"
+          title="Active Alerts"
+          value={String(
+            statistics.activeAlerts
+          )}
+          subtitle="unacknowledged"
+        />
+
+        <StatCard
+          type="zones"
+          title="High-Risk Zones"
+          value={String(
+            statistics.highRiskZones
+          )}
+          subtitle="of 3 zones"
+        />
+
       </div>
 
-      {/* COMMAND SUMMARY */}
+      {/* =====================================================
+          COMMAND SUMMARY
+      ===================================================== */}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+
         <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500">Mine Risk Level</p>
+
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">
+            Mine Risk Level
+          </p>
+
           <div className="mt-2 flex items-center gap-2">
-            <Badge variant={bandVariant[statistics.overallBand]} dot>{statistics.overallBand}</Badge>
-            <span className="text-xs text-slate-500">{statistics.overallSafetyScore}/100</span>
+
+            <Badge
+              variant={
+                bandVariant[
+                  statistics.overallBand
+                ]
+              }
+              dot
+            >
+              {statistics.overallBand}
+            </Badge>
+
+            <span className="text-xs text-slate-500">
+              {statistics.overallSafetyScore}/100
+            </span>
+
           </div>
         </div>
 
         <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500">Highest-Risk Zone</p>
+
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">
+            Highest-Risk Zone
+          </p>
+
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs font-semibold text-white">{statistics.highestRiskZone?.name || "--"}</span>
+
+            <span className="text-xs font-semibold text-white">
+              {statistics.highestRiskZone?.name ||
+                "--"}
+            </span>
+
             {statistics.highestRiskZone && (
-              <Badge variant={bandVariant[statistics.highestRiskZone.band]}>{statistics.highestRiskZone.band}</Badge>
+              <Badge
+                variant={
+                  bandVariant[
+                    statistics.highestRiskZone
+                      .band
+                  ]
+                }
+              >
+                {
+                  statistics.highestRiskZone
+                    .band
+                }
+              </Badge>
             )}
+
           </div>
         </div>
 
         <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500">Highest-Risk Worker</p>
+
+          <p className="text-[10px] uppercase tracking-wider text-slate-500">
+            Highest-Risk Worker
+          </p>
+
           <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs font-semibold text-white">{statistics.highestRiskWorker?.name || "--"}</span>
+
+            <span className="text-xs font-semibold text-white">
+              {statistics.highestRiskWorker
+                ?.name || "--"}
+            </span>
+
             {statistics.highestRiskWorker && (
-              <Badge variant={bandVariant[statistics.highestRiskWorker.band]}>{statistics.highestRiskWorker.band}</Badge>
+              <Badge
+                variant={
+                  bandVariant[
+                    statistics.highestRiskWorker
+                      .band
+                  ]
+                }
+              >
+                {
+                  statistics.highestRiskWorker
+                    .band
+                }
+              </Badge>
             )}
+
           </div>
         </div>
+
       </div>
 
-      {/* LIVE MAP + RISK + ALERTS */}
+      {/* =====================================================
+          LIVE MAP + RISK + ALERTS
+      ===================================================== */}
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_330px]">
+
         <MineMap workers={mapWorkers} />
 
         <div className="space-y-5">
-          <RiskScore score={statistics.overallRiskScore} />
-          <AlertPanel alerts={panelAlerts} criticalCount={criticalAlertCount} />
+
+          <RiskScore
+            score={
+              statistics.overallRiskScore
+            }
+          />
+
+          <AlertPanel
+            alerts={panelAlerts}
+            criticalCount={
+              criticalAlertCount
+            }
+          />
+
         </div>
+
       </div>
 
-      {/* SENSOR OVERVIEW */}
-      <SensorOverview sensors={liveSensors} />
+      {/* =====================================================
+          SENSOR OVERVIEW
+      ===================================================== */}
 
-      {/* ANALYTICS */}
+      <SensorOverview
+        sensors={liveSensors}
+      />
+
+      {/* =====================================================
+          ANALYTICS
+      ===================================================== */}
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <RiskChart data={riskTrendData} />
-        <WorkerStatus workers={topRiskWorkers} />
+
+        <RiskChart
+          data={riskTrendData}
+        />
+
+        <WorkerStatus
+          workers={topRiskWorkers}
+        />
+
       </div>
 
     </div>
