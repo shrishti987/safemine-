@@ -6,7 +6,7 @@ import {
   CircleAlert,
 } from "lucide-react";
 
-const sensors = [
+const defaultSensors = [
   {
     name: "Gas",
     value: "18.4",
@@ -49,7 +49,7 @@ const sensors = [
   },
 ];
 
-function SensorOverview() {
+function SensorOverview({ sensors = defaultSensors }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
       <div className="flex items-center justify-between">

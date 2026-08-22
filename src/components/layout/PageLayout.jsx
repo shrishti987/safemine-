@@ -15,9 +15,11 @@ function PageLayout({ children, activePage, setActivePage }) {
       />
 
       <div
-        className={`min-h-screen transition-all duration-300 ${
-          collapsed ? "ml-[78px]" : "ml-[250px]"
-        }`}
+        className={
+          collapsed
+            ? "min-h-screen transition-all duration-300 ml-[78px]"
+            : "min-h-screen transition-all duration-300 ml-[250px]"
+        }
       >
         <Topbar />
 

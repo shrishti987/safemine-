@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { MineDataProvider } from "./context/MineDataContext";
 import PageLayout from "./components/layout/PageLayout";
 import Dashboard from "./pages/Dashboard";
 import LiveMine from "./pages/LiveMine";
@@ -32,9 +33,11 @@ function App() {
   const ActivePage = pages[activePage] || Dashboard;
 
   return (
-    <PageLayout activePage={activePage} setActivePage={setActivePage}>
-      <ActivePage />
-    </PageLayout>
+    <MineDataProvider>
+      <PageLayout activePage={activePage} setActivePage={setActivePage}>
+        <ActivePage />
+      </PageLayout>
+    </MineDataProvider>
   );
 }
 

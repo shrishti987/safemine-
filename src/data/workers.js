@@ -13,6 +13,7 @@ const workers = [
     battery: 94,
     signal: 96,
     lastSeen: "Just now",
+    position: { x: "18%", y: "22%" },
   },
 
   {
@@ -29,6 +30,7 @@ const workers = [
     battery: 88,
     signal: 91,
     lastSeen: "Just now",
+    position: { x: "55%", y: "20%" },
   },
 
   {
@@ -37,14 +39,15 @@ const workers = [
     role: "Mining Operator",
     zone: "Zone B",
     helmetId: "HLM-003",
-    status: "Warning",
-    riskScore: 6.4,
-    temperature: 42.8,
-    gas: 31.2,
-    motion: 0.42,
-    battery: 76,
-    signal: 84,
+    status: "Safe",
+    riskScore: 2.3,
+    temperature: 34.0,
+    gas: 21.5,
+    motion: 0.15,
+    battery: 85,
+    signal: 90,
     lastSeen: "2 min ago",
+    position: { x: "68%", y: "38%" },
   },
 
   {
@@ -53,14 +56,15 @@ const workers = [
     role: "Mining Operator",
     zone: "Zone C",
     helmetId: "HLM-004",
-    status: "Critical",
-    riskScore: 9.1,
-    temperature: 44.1,
-    gas: 78,
-    motion: 0.82,
-    battery: 61,
-    signal: 67,
+    status: "Safe",
+    riskScore: 1.8,
+    temperature: 31.5,
+    gas: 18,
+    motion: 0.08,
+    battery: 94,
+    signal: 96,
     lastSeen: "Just now",
+    position: { x: "78%", y: "72%" },
   },
 
   {
@@ -77,6 +81,7 @@ const workers = [
     battery: 91,
     signal: 95,
     lastSeen: "1 min ago",
+    position: { x: "30%", y: "15%" },
   },
 
   {
@@ -93,6 +98,7 @@ const workers = [
     battery: 82,
     signal: 89,
     lastSeen: "1 min ago",
+    position: { x: "45%", y: "78%" },
   },
 
   {
@@ -109,22 +115,24 @@ const workers = [
     battery: 73,
     signal: 92,
     lastSeen: "2 min ago",
+    position: { x: "12%", y: "40%" },
   },
 
   {
     id: "SM-008",
     name: "Mohit Rawat",
     role: "Mining Operator",
-    zone: "Zone D",
+    zone: "Zone B",
     helmetId: "HLM-008",
-    status: "Warning",
-    riskScore: 5.7,
-    temperature: 37.6,
-    gas: 29.1,
-    motion: 0.31,
-    battery: 65,
-    signal: 71,
+    status: "Safe",
+    riskScore: 2.0,
+    temperature: 31.9,
+    gas: 18.2,
+    motion: 0.1,
+    battery: 88,
+    signal: 90,
     lastSeen: "3 min ago",
+    position: { x: "60%", y: "52%" },
   },
 ];
 

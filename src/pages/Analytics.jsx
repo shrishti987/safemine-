@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   TrendingUp,
   ShieldCheck,
@@ -18,33 +19,39 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-
-const riskData = [
-  { time: "18:00", risk: 2.1 },
-  { time: "19:00", risk: 2.4 },
-  { time: "20:00", risk: 2.8 },
-  { time: "21:00", risk: 3.1 },
-  { time: "22:00", risk: 2.7 },
-  { time: "23:00", risk: 3.2 },
-];
-
-const zoneData = [
-  { zone: "Zone A", risk: 1.8 },
-  { zone: "Zone B", risk: 4.2 },
-  { zone: "Zone C", risk: 6.7 },
-  { zone: "Zone D", risk: 2.4 },
-  { zone: "Zone E", risk: 3.1 },
-];
-
-const sensorData = [
-  { name: "Gas", value: 18 },
-  { name: "Temp", value: 32 },
-  { name: "Pressure", value: 12 },
-  { name: "Motion", value: 21 },
-  { name: "Impact", value: 4 },
-];
+import { useMineContext } from "../context/MineDataContext";
 
 function Analytics() {
+  const { workers, zones, alerts, riskHistory, statistics } = useMineContext();
+
+  const riskTrendData = useMemo(
+    () => riskHistory.map((point) => ({ time: point.time, risk: point.score })),
+    [riskHistory]
+  );
+
+  const zoneRiskData = useMemo(
+    () => zones.map((zone) => ({ zone: zone.name, risk: Number((zone.safetyScore / 10).toFixed(1)) })),
+    [zones]
+  );
+
+  const sensorActivityData = useMemo(() => {
+    const countFactor = (key) => workers.filter((worker) => worker.factors.some((factor) => factor.key === key)).length;
+
+    return [
+      { name: "Gas", value: countFactor("gasRising") },
+      { name: "Temp", value: countFactor("tempRising") },
+      { name: "Motion", value: countFactor("abnormalMotion") },
+      { name: "Battery", value: countFactor("lowBattery") },
+      { name: "Signal", value: countFactor("weakSignal") },
+    ];
+  }, [workers]);
+
+  const safetyScorePercent = (100 - statistics.overallSafetyScore).toFixed(1);
+  const alertsToday = alerts.length;
+  const activeAlerts = statistics.activeAlerts;
+
+  const insight = zones.find((zone) => zone.hazardDetected);
+
   return (
     <div className="mx-auto max-w-[1700px] space-y-5">
 
@@ -79,18 +86,18 @@ function Analytics() {
           </div>
 
           <p className="mt-3 text-3xl font-bold text-white">
-            94.8%
+            {safetyScorePercent}%
           </p>
 
           <div className="mt-2 flex items-center gap-1">
             <TrendingUp size={12} className="text-emerald-400" />
 
             <span className="text-[9px] text-emerald-400">
-              +3.4%
+              {statistics.overallBand}
             </span>
 
             <span className="text-[9px] text-slate-600">
-              this week
+              mine-wide
             </span>
           </div>
         </div>
@@ -108,18 +115,18 @@ function Analytics() {
           </div>
 
           <p className="mt-3 text-3xl font-bold text-white">
-            3.2
+            {statistics.overallRiskScore}
           </p>
 
           <p className="mt-2 text-[9px] text-emerald-400">
-            Low risk range
+            {statistics.overallSafetyScore}/100 safety score
           </p>
         </div>
 
         <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
           <div className="flex items-center justify-between">
             <p className="text-[10px] uppercase tracking-wider text-slate-500">
-              Alerts Today
+              Alerts Logged
             </p>
 
             <AlertTriangle
@@ -129,11 +136,11 @@ function Analytics() {
           </div>
 
           <p className="mt-3 text-3xl font-bold text-white">
-            20
+            {alertsToday}
           </p>
 
           <p className="mt-2 text-[9px] text-amber-400">
-            3 currently active
+            {activeAlerts} currently active
           </p>
         </div>
 
@@ -150,41 +157,40 @@ function Analytics() {
           </div>
 
           <p className="mt-3 text-3xl font-bold text-white">
-            128
+            {statistics.totalWorkers}
           </p>
 
           <p className="mt-2 text-[9px] text-slate-500">
-            124 currently online
+            {statistics.safeWorkers} currently safe
           </p>
         </div>
 
       </div>
 
       {/* AI INSIGHT */}
-      <div className="rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.03] p-5">
+      <div className={`rounded-2xl border p-5 ${insight ? "border-red-400/15 bg-red-400/[0.03]" : "border-cyan-400/10 bg-cyan-400/[0.03]"}`}>
         <div className="flex gap-4">
 
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${insight ? "bg-red-400/10" : "bg-cyan-400/10"}`}>
             <BrainCircuit
               size={20}
-              className="text-cyan-400"
+              className={insight ? "text-red-400" : "text-cyan-400"}
             />
           </div>
 
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-400">
+            <p className={`text-[10px] font-semibold uppercase tracking-wider ${insight ? "text-red-400" : "text-cyan-400"}`}>
               AI Insight
             </p>
 
             <h3 className="mt-1 text-sm font-semibold text-white">
-              Risk concentration detected in Zone C
+              {insight ? `Risk concentration detected in ${insight.name}` : "All zones operating within normal parameters"}
             </h3>
 
             <p className="mt-1 max-w-3xl text-[10px] leading-relaxed text-slate-500">
-              SafeMine AI has identified increased environmental
-              risk in Zone C. Gas concentration and temperature
-              readings are slightly above the mine-wide average.
-              Increased monitoring is recommended.
+              {insight
+                ? insight.hazardReason
+                : "SafeMine AI is continuously analyzing gas, temperature, and motion trends across every zone. No sustained upward trend has been detected."}
             </p>
           </div>
 
@@ -203,7 +209,7 @@ function Analytics() {
             </h3>
 
             <p className="mt-1 text-[10px] text-slate-600">
-              Average AI risk score over the last 6 hours
+              Average mine-wide risk score over time
             </p>
           </div>
 
@@ -213,7 +219,7 @@ function Analytics() {
               width="100%"
               height="100%"
             >
-              <AreaChart data={riskData}>
+              <AreaChart data={riskTrendData}>
 
                 <defs>
                   <linearGradient
@@ -305,7 +311,7 @@ function Analytics() {
               width="100%"
               height="100%"
             >
-              <BarChart data={zoneData}>
+              <BarChart data={zoneRiskData}>
 
                 <CartesianGrid
                   stroke="rgba(255,255,255,0.04)"
@@ -365,13 +371,13 @@ function Analytics() {
           </h3>
 
           <p className="mt-1 text-[10px] text-slate-600">
-            Number of abnormal readings detected today
+            Number of workers currently contributing each risk factor
           </p>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
 
-          {sensorData.map((sensor) => (
+          {sensorActivityData.map((sensor) => (
             <div
               key={sensor.name}
               className="rounded-xl border border-white/[0.05] bg-white/[0.015] p-4"
@@ -389,7 +395,7 @@ function Analytics() {
                   className="h-full rounded-full bg-cyan-400"
                   style={{
                     width: `${Math.min(
-                      sensor.value * 3,
+                      (sensor.value / Math.max(statistics.totalWorkers, 1)) * 100,
                       100
                     )}%`,
                   }}

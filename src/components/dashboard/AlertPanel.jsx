@@ -6,7 +6,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-const alerts = [
+const defaultAlerts = [
   {
     worker: "SM-024",
     title: "Critical gas level detected",
@@ -33,7 +33,8 @@ const alerts = [
   },
 ];
 
-function AlertPanel() {
+function AlertPanel({ alerts = defaultAlerts, criticalCount }) {
+  const activeCriticalCount = criticalCount ?? alerts.filter((alert) => alert.type === "critical").length;
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
       <div className="flex items-center justify-between">
@@ -54,13 +55,19 @@ function AlertPanel() {
       </div>
 
       <div className="mt-5 space-y-3">
-        {alerts.map((alert) => {
+        {alerts.length === 0 && (
+          <p className="rounded-xl border border-white/[0.05] bg-white/[0.015] p-4 text-center text-[10px] text-slate-500">
+            No active alerts. All readings are within normal range.
+          </p>
+        )}
+
+        {alerts.map((alert, index) => {
           const Icon = alert.icon;
           const critical = alert.type === "critical";
 
           return (
             <div
-              key={alert.worker}
+              key={alert.id || `${alert.worker}-${index}`}
               className={`rounded-xl border p-3 ${
                 critical
                   ? "border-red-500/15 bg-red-500/[0.04]"
@@ -117,16 +124,18 @@ function AlertPanel() {
         })}
       </div>
 
-      <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-500/[0.04] px-3 py-2.5">
-        <AlertTriangle size={13} className="text-red-400" />
+      {activeCriticalCount > 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-500/[0.04] px-3 py-2.5">
+          <AlertTriangle size={13} className="text-red-400" />
 
-        <p className="text-[9px] text-slate-500">
-          <span className="font-semibold text-red-400">
-            1 critical alert
-          </span>{" "}
-          requires immediate response.
-        </p>
-      </div>
+          <p className="text-[9px] text-slate-500">
+            <span className="font-semibold text-red-400">
+              {activeCriticalCount} critical alert{activeCriticalCount > 1 ? "s" : ""}
+            </span>{" "}
+            require{activeCriticalCount > 1 ? "" : "s"} immediate response.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

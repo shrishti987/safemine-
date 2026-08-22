@@ -1,6 +1,6 @@
 import { MapPin, Maximize2, Layers, Navigation } from "lucide-react";
 
-const workers = [
+const defaultWorkers = [
   { id: "SM-021", x: "22%", y: "35%", status: "safe" },
   { id: "SM-014", x: "48%", y: "24%", status: "safe" },
   { id: "SM-032", x: "72%", y: "39%", status: "warning" },
@@ -9,7 +9,7 @@ const workers = [
   { id: "SM-017", x: "57%", y: "78%", status: "safe" },
 ];
 
-function MineMap() {
+function MineMap({ workers = defaultWorkers }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
       <div className="flex items-center justify-between">

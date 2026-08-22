@@ -8,7 +8,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-const data = [
+const defaultData = [
   { time: "18:00", risk: 2.1 },
   { time: "19:00", risk: 2.4 },
   { time: "20:00", risk: 2.8 },
@@ -18,7 +18,7 @@ const data = [
   { time: "22:30", risk: 3.2 },
 ];
 
-function RiskChart() {
+function RiskChart({ data = defaultData }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
       <div className="flex items-center justify-between">

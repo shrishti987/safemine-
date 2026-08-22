@@ -5,6 +5,8 @@ import {
   Siren,
   TrendingUp,
   TrendingDown,
+  Bell,
+  MapPinned,
 } from "lucide-react";
 
 const icons = {
@@ -12,6 +14,8 @@ const icons = {
   safe: ShieldCheck,
   warning: AlertTriangle,
   critical: Siren,
+  alerts: Bell,
+  zones: MapPinned,
 };
 
 function StatCard({
@@ -42,6 +46,14 @@ function StatCard({
     critical: {
       icon: "text-red-400",
       bg: "bg-red-400/10",
+    },
+    alerts: {
+      icon: "text-cyan-400",
+      bg: "bg-cyan-400/10",
+    },
+    zones: {
+      icon: "text-violet-400",
+      bg: "bg-violet-400/10",
     },
   };
 
