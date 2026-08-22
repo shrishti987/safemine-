@@ -1,6 +1,6 @@
 import { ChevronRight, ShieldCheck } from "lucide-react";
 
-const workers = [
+const defaultWorkers = [
   {
     id: "SM-021",
     name: "Arjun Singh",
@@ -31,7 +31,7 @@ const workers = [
   },
 ];
 
-function WorkerStatus() {
+function WorkerStatus({ workers = defaultWorkers }) {
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
       <div className="flex items-center justify-between">

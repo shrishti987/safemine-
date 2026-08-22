@@ -9,20 +9,14 @@ import {
   ShieldCheck,
   AlertTriangle,
   Siren,
+  Eye,
 } from "lucide-react";
+import { useMineContext } from "../context/MineDataContext";
+import Modal from "../components/common/Modal";
+import Badge from "../components/common/Badge";
+import WorkerDetails from "../components/workers/WorkerDetails";
 
-const zones = ["All", "Zone A", "Zone B", "Zone C"];
-
-const workers = [
-  { id: "SM-001", name: "Arjun Singh", zone: "Zone A", status: "Safe", battery: 94, signal: 96, x: "18%", y: "22%" },
-  { id: "SM-005", name: "Deepak Joshi", zone: "Zone A", status: "Safe", battery: 91, signal: 95, x: "30%", y: "15%" },
-  { id: "SM-008", name: "Mohit Rawat", zone: "Zone A", status: "Safe", battery: 97, signal: 93, x: "12%", y: "40%" },
-  { id: "SM-002", name: "Rohit Kumar", zone: "Zone B", status: "Safe", battery: 88, signal: 91, x: "55%", y: "20%" },
-  { id: "SM-003", name: "Vikas Negi", zone: "Zone B", status: "Warning", battery: 76, signal: 84, x: "68%", y: "38%" },
-  { id: "SM-007", name: "Naveen Rana", zone: "Zone B", status: "Warning", battery: 69, signal: 78, x: "60%", y: "52%" },
-  { id: "SM-004", name: "Aman Rawat", zone: "Zone C", status: "Critical", battery: 61, signal: 67, x: "78%", y: "72%" },
-  { id: "SM-006", name: "Karan Bisht", zone: "Zone C", status: "Safe", battery: 82, signal: 89, x: "45%", y: "78%" },
-];
+const zoneFilters = ["All", "Zone A", "Zone B", "Zone C"];
 
 const statusStyles = {
   Safe: {
@@ -43,11 +37,28 @@ const statusStyles = {
     icon: "text-red-400",
     chip: "bg-red-400/10",
   },
+  Offline: {
+    ring: "border-slate-500 bg-slate-500/20",
+    glow: "bg-slate-500",
+    icon: "text-slate-500",
+    chip: "bg-slate-500/10",
+  },
+};
+
+const bandVariant = {
+  SAFE: "success",
+  MODERATE: "warning",
+  HIGH: "orange",
+  CRITICAL: "danger",
 };
 
 function LiveMine() {
+  const { workers, zones } = useMineContext();
   const [activeZone, setActiveZone] = useState("All");
   const [selectedWorker, setSelectedWorker] = useState(null);
+  const [detailWorkerId, setDetailWorkerId] = useState(null);
+
+  const detailWorker = workers.find((worker) => worker.id === detailWorkerId) || null;
 
   const visibleWorkers = workers.filter(
     (worker) => activeZone === "All" || worker.zone === activeZone
@@ -59,9 +70,7 @@ function LiveMine() {
     workers.reduce((total, worker) => total + worker.signal, 0) / workers.length
   );
 
-  const criticalCount = workers.filter(
-    (worker) => worker.status === "Critical"
-  ).length;
+  const criticalCount = workers.filter((worker) => worker.status === "Critical").length;
 
   return (
     <div className="mx-auto max-w-[1700px] space-y-5">
@@ -120,6 +129,61 @@ function LiveMine() {
         </div>
       </div>
 
+      {/* PER-ZONE BREAKDOWN */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {zones.map((zone) => (
+          <div
+            key={zone.id}
+            className={`rounded-2xl border p-5 ${
+              zone.hazardDetected
+                ? "border-red-500/20 bg-red-500/[0.04]"
+                : "border-white/[0.06] bg-[#0c121c]"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">{zone.name}</h3>
+              <Badge variant={bandVariant[zone.band]} dot>{zone.band}</Badge>
+            </div>
+
+            <p className="mt-1 text-[10px] text-slate-500">
+              👷 {zone.workerCount} Workers
+            </p>
+
+            <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Safe
+                <span className="ml-auto font-semibold text-white">{zone.safeCount}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                Warning
+                <span className="ml-auto font-semibold text-white">{zone.warningCount}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+                Critical
+                <span className="ml-auto font-semibold text-white">{zone.criticalCount}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-slate-400">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                Offline
+                <span className="ml-auto font-semibold text-white">{zone.offlineCount}</span>
+              </div>
+            </div>
+
+            {zone.hazardDetected && (
+              <p className="mt-3 text-[9px] font-medium leading-relaxed text-red-400">
+                ⚠ {zone.hazardReason}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
         <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -133,7 +197,7 @@ function LiveMine() {
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
-              {zones.map((zone) => (
+              {zoneFilters.map((zone) => (
                 <button
                   key={zone}
                   onClick={() => setActiveZone(zone)}
@@ -173,7 +237,7 @@ function LiveMine() {
             </span>
 
             {visibleWorkers.map((worker) => {
-              const style = statusStyles[worker.status];
+              const style = statusStyles[worker.status] || statusStyles.Safe;
               const selected = selectedWorker === worker.id;
 
               return (
@@ -183,7 +247,7 @@ function LiveMine() {
                     setSelectedWorker(selected ? null : worker.id)
                   }
                   className="absolute -translate-x-1/2 -translate-y-1/2"
-                  style={{ left: worker.x, top: worker.y }}
+                  style={{ left: worker.position.x, top: worker.position.y }}
                 >
                   <div
                     className={`absolute -inset-2 rounded-full opacity-20 blur-sm ${style.glow}`}
@@ -234,7 +298,7 @@ function LiveMine() {
 
           <div className="mt-4 max-h-[440px] space-y-2 overflow-y-auto pr-1">
             {visibleWorkers.map((worker) => {
-              const style = statusStyles[worker.status];
+              const style = statusStyles[worker.status] || statusStyles.Safe;
               const selected = selectedWorker === worker.id;
 
               return (
@@ -273,15 +337,42 @@ function LiveMine() {
                   <div className="text-right">
                     <p className="text-[9px] text-slate-500">{worker.signal}%</p>
                     <p className="text-[9px] text-slate-600">
-                      {worker.battery}% bat.
+                      {Math.round(worker.battery)}% bat.
                     </p>
                   </div>
+
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDetailWorkerId(worker.id);
+                    }}
+                    className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-white/[0.06] hover:text-white"
+                  >
+                    <Eye size={13} />
+                  </span>
                 </button>
               );
             })}
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={Boolean(detailWorker)}
+        onClose={() => setDetailWorkerId(null)}
+        size="lg"
+        showClose={false}
+      >
+        {detailWorker && (
+          <WorkerDetails
+            worker={detailWorker}
+            onClose={() => setDetailWorkerId(null)}
+            onAcknowledge={() => setDetailWorkerId(null)}
+          />
+        )}
+      </Modal>
     </div>
   );
 }
