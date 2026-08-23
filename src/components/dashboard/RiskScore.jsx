@@ -1,6 +1,6 @@
-import { ShieldAlert, Activity } from "lucide-react";
+import { ShieldAlert, Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
-function RiskScore({ score = 3.2 }) {
+function RiskScore({ score = 3.2, forecast = null }) {
   const percentage = score * 10;
 
   let level = "LOW";
@@ -72,6 +72,24 @@ function RiskScore({ score = 3.2 }) {
           AI analyzing 124 active worker streams
         </span>
       </div>
+
+      {forecast && (
+        <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-3">
+          {forecast.trendDirection === "rising" ? (
+            <TrendingUp size={13} className="text-amber-400" />
+          ) : forecast.trendDirection === "falling" ? (
+            <TrendingDown size={13} className="text-emerald-400" />
+          ) : (
+            <Minus size={13} className="text-slate-500" />
+          )}
+
+          <span className="text-[10px] text-slate-500">
+            {forecast.trendDirection.charAt(0).toUpperCase() +
+              forecast.trendDirection.slice(1)}{" "}
+            — predicted {forecast.predictedScore}/10 in 30 min
+          </span>
+        </div>
+      )}
     </div>
   );
 }
