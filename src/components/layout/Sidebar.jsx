@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
+  Sparkles,
 } from "lucide-react";
 
 const menuItems = [
@@ -51,6 +53,16 @@ const menuItems = [
     label: "Analytics",
     icon: BarChart3,
     id: "analytics",
+  },
+  {
+    label: "AI Forecast",
+    icon: Sparkles,
+    id: "forecast",
+  },
+  {
+    label: "Help & Support",
+    icon: HelpCircle,
+    id: "help",
   },
 ];
 

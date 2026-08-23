@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { useMineContext } from "../context/MineDataContext";
+import useRiskForecast from '../hooks/useRiskForecast';
 
 import StatCard from "../components/dashboard/StatCard";
 import RiskScore from "../components/dashboard/RiskScore";
@@ -46,6 +47,25 @@ function Dashboard() {
     stopSimulation,
     resetSimulation,
   } = useMineContext();
+
+  const forecastData = useRiskForecast();
+
+  // =========================================================
+  // MINE FORECAST SUMMARY
+  // =========================================================
+
+  const forecastSummary = useMemo(() => {
+    const forecastPoints = forecastData.mineForecast.forecast;
+    const lastForecastPoint =
+      forecastPoints[forecastPoints.length - 1];
+
+    return {
+      trendDirection: forecastData.mineForecast.trendDirection,
+      predictedScore: lastForecastPoint
+        ? lastForecastPoint.score
+        : statistics.overallRiskScore,
+    };
+  }, [forecastData, statistics]);
 
   // =========================================================
   // HAZARD ZONE
@@ -649,9 +669,8 @@ function Dashboard() {
         <div className="space-y-5">
 
           <RiskScore
-            score={
-              statistics.overallRiskScore
-            }
+            score={statistics.overallRiskScore}
+            forecast={forecastSummary}
           />
 
           <AlertPanel

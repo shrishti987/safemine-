@@ -44,3 +44,4 @@ coverage/
 # Optional: deployment
 .vercel/
 .netlify/
+.vercel
