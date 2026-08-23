@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
 } from "lucide-react";
 
 const menuItems = [
@@ -51,6 +52,11 @@ const menuItems = [
     label: "Analytics",
     icon: BarChart3,
     id: "analytics",
+  },
+  {
+    label: "Help & Support",
+    icon: HelpCircle,
+    id: "help",
   },
 ];
 

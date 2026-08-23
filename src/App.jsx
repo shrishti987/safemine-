@@ -8,6 +8,7 @@ import Alerts from "./pages/Alerts";
 import Sensors from "./pages/Sensors";
 import Evacuation from "./pages/Evacuation";
 import Analytics from "./pages/Analytics";
+import Help from "./pages/Help";
 import Helmets from "./pages/Helmets";
 import Network from "./pages/Network";
 import Maintenance from "./pages/Maintenance";
@@ -21,6 +22,7 @@ const pages = {
   sensors: Sensors,
   evacuation: Evacuation,
   analytics: Analytics,
+  help: Help,
   helmets: Helmets,
   network: Network,
   maintenance: Maintenance,
