@@ -1,158 +1,530 @@
-import { MapPin, Maximize2, Layers, Navigation } from "lucide-react";
+import {
+  Layers,
+  Maximize2,
+  Navigation,
+  MapPin,
+} from "lucide-react";
 
-const defaultWorkers = [
-  { id: "SM-021", x: "22%", y: "35%", status: "safe" },
-  { id: "SM-014", x: "48%", y: "24%", status: "safe" },
-  { id: "SM-032", x: "72%", y: "39%", status: "warning" },
-  { id: "SM-008", x: "36%", y: "65%", status: "safe" },
-  { id: "SM-024", x: "78%", y: "70%", status: "critical" },
-  { id: "SM-017", x: "57%", y: "78%", status: "safe" },
+import {
+  MapContainer,
+  TileLayer,
+  CircleMarker,
+  Popup,
+  Polygon,
+  useMap,
+} from "react-leaflet";
+
+import "leaflet/dist/leaflet.css";
+
+import { useMineContext } from "../../context/MineDataContext";
+
+
+// --------------------------------------------------
+// MAP CENTER
+// --------------------------------------------------
+
+const MAP_CENTER = [30.3165, 78.0322];
+
+
+// --------------------------------------------------
+// COMPACT WORKER POSITION
+// --------------------------------------------------
+// Your workers.js already contains x/y positions.
+// We convert them into a SMALL area around the
+// mine center so workers stay close together.
+// --------------------------------------------------
+
+function positionToCoordinates(position) {
+  const x = parseFloat(position?.x || "50") / 100;
+  const y = parseFloat(position?.y || "50") / 100;
+
+  // Small geographic spread
+  const latitude =
+    MAP_CENTER[0] + (0.006 - y * 0.012);
+
+  const longitude =
+    MAP_CENTER[1] + (x * 0.016 - 0.008);
+
+  return [latitude, longitude];
+}
+
+
+// --------------------------------------------------
+// MAP CONTROLS
+// --------------------------------------------------
+
+function MapControls() {
+  const map = useMap();
+
+  const handleLocate = () => {
+    map.setView(MAP_CENTER, 16, {
+      animate: true,
+    });
+  };
+
+  const handleFullscreen = () => {
+    const container = map.getContainer();
+
+    if (container.requestFullscreen) {
+      container.requestFullscreen();
+    }
+  };
+
+  return (
+    <div className="absolute right-3 top-3 z-[1000] flex flex-col gap-2">
+
+      <button
+        type="button"
+        onClick={handleLocate}
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#0c121c]/90 text-slate-400 shadow-lg backdrop-blur hover:bg-[#111a27] hover:text-white"
+        title="Center map"
+      >
+        <Navigation size={14} />
+      </button>
+
+      <button
+        type="button"
+        onClick={handleFullscreen}
+        className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#0c121c]/90 text-slate-400 shadow-lg backdrop-blur hover:bg-[#111a27] hover:text-white"
+        title="Fullscreen"
+      >
+        <Maximize2 size={14} />
+      </button>
+
+    </div>
+  );
+}
+
+
+// --------------------------------------------------
+// ZONE AREAS
+// --------------------------------------------------
+
+const ZONE_A = [
+  [30.322, 78.024],
+  [30.322, 78.030],
+  [30.316, 78.030],
+  [30.316, 78.024],
 ];
 
-function MineMap({ workers = defaultWorkers }) {
+const ZONE_B = [
+  [30.322, 78.030],
+  [30.322, 78.038],
+  [30.316, 78.038],
+  [30.316, 78.030],
+];
+
+const ZONE_C = [
+  [30.316, 78.024],
+  [30.316, 78.033],
+  [30.310, 78.033],
+  [30.310, 78.024],
+];
+
+
+// --------------------------------------------------
+// MAIN COMPONENT
+// --------------------------------------------------
+
+function MineMap() {
+  const { workers } = useMineContext();
+
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#0c121c] p-5">
+
+      {/* HEADER */}
       <div className="flex items-center justify-between">
+
         <div>
+
           <div className="flex items-center gap-2">
+
             <h3 className="text-sm font-semibold text-white">
               Live Mine Map
             </h3>
 
             <span className="flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-0.5 text-[9px] font-medium text-emerald-400">
+
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+
               LIVE
+
             </span>
+
           </div>
 
           <p className="mt-1 text-[10px] text-slate-600">
-            Worker locations updated every 3 seconds
+            Real-time worker locations and safety status
           </p>
+
         </div>
 
+
+        {/* HEADER BUTTONS */}
+
         <div className="flex gap-1.5">
-          <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] text-slate-500 hover:bg-white/[0.04] hover:text-white">
+
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] text-slate-500 hover:bg-white/[0.04] hover:text-white"
+            title="Map layers"
+          >
             <Layers size={14} />
           </button>
 
-          <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] text-slate-500 hover:bg-white/[0.04] hover:text-white">
-            <Maximize2 size={14} />
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.06] text-slate-500 hover:bg-white/[0.04] hover:text-white"
+            title="Navigation"
+          >
+            <Navigation size={14} />
           </button>
+
         </div>
+
       </div>
 
-      <div className="relative mt-5 h-[350px] overflow-hidden rounded-xl border border-white/[0.05] bg-[#080d15]">
-        {/* Mine tunnel pattern */}
-        <div className="absolute inset-0 opacity-30">
-          <div className="absolute left-[8%] top-[15%] h-[2px] w-[80%] rotate-[12deg] bg-slate-600" />
-          <div className="absolute left-[15%] top-[45%] h-[2px] w-[70%] rotate-[-15deg] bg-slate-600" />
-          <div className="absolute left-[25%] top-[75%] h-[2px] w-[65%] rotate-[8deg] bg-slate-600" />
 
-          <div className="absolute left-[20%] top-[8%] h-[90%] w-[2px] rotate-[18deg] bg-slate-700" />
-          <div className="absolute left-[60%] top-[5%] h-[90%] w-[2px] rotate-[-14deg] bg-slate-700" />
+      {/* MAP */}
+
+      <div className="relative mt-5 h-[350px] overflow-hidden rounded-xl border border-white/[0.05]">
+
+        <MapContainer
+          center={MAP_CENTER}
+          zoom={16}
+          minZoom={14}
+          maxZoom={19}
+          scrollWheelZoom={true}
+          zoomControl={true}
+          className="h-full w-full"
+        >
+
+          {/* OPEN STREET MAP */}
+
+          <TileLayer
+            attribution="&copy; OpenStreetMap contributors"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+
+          {/* ---------------------------------------- */}
+          {/* ZONE A */}
+          {/* ---------------------------------------- */}
+
+          <Polygon
+            positions={ZONE_A}
+            pathOptions={{
+              color: "#10b981",
+              fillColor: "#10b981",
+              fillOpacity: 0.08,
+              weight: 1,
+            }}
+          />
+
+
+          {/* ---------------------------------------- */}
+          {/* ZONE B */}
+          {/* ---------------------------------------- */}
+
+          <Polygon
+            positions={ZONE_B}
+            pathOptions={{
+              color: "#f59e0b",
+              fillColor: "#f59e0b",
+              fillOpacity: 0.08,
+              weight: 1,
+            }}
+          />
+
+
+          {/* ---------------------------------------- */}
+          {/* ZONE C */}
+          {/* ---------------------------------------- */}
+
+          <Polygon
+            positions={ZONE_C}
+            pathOptions={{
+              color: "#38bdf8",
+              fillColor: "#38bdf8",
+              fillOpacity: 0.08,
+              weight: 1,
+            }}
+          />
+
+
+          {/* ---------------------------------------- */}
+          {/* WORKERS */}
+          {/* ---------------------------------------- */}
+
+          {workers.map((worker) => {
+
+            const position = positionToCoordinates(
+              worker.position
+            );
+
+            const status = String(
+              worker.status || "Safe"
+            ).toLowerCase();
+
+            const isCritical =
+              status === "critical" ||
+              worker.band === "CRITICAL";
+
+            const isWarning =
+              status === "warning" ||
+              worker.band === "MODERATE" ||
+              worker.band === "HIGH";
+
+            const markerColor = isCritical
+              ? "#f87171"
+              : isWarning
+              ? "#fbbf24"
+              : "#34d399";
+
+
+            return (
+              <CircleMarker
+                key={worker.id}
+                center={position}
+                radius={8}
+                pathOptions={{
+                  color: markerColor,
+                  fillColor: markerColor,
+                  fillOpacity: 0.9,
+                  weight: 3,
+                }}
+              >
+
+                {/* WORKER POPUP */}
+
+                <Popup>
+
+                  <div className="min-w-[180px]">
+
+                    <div className="mb-2 flex items-center gap-2">
+
+                      <MapPin
+                        size={16}
+                        color={markerColor}
+                      />
+
+                      <strong>
+                        {worker.name}
+                      </strong>
+
+                    </div>
+
+
+                    <div className="space-y-1 text-sm">
+
+                      <div>
+                        <b>ID:</b> {worker.id}
+                      </div>
+
+                      <div>
+                        <b>Zone:</b> {worker.zone}
+                      </div>
+
+                      <div>
+                        <b>Status:</b>{" "}
+                        <span
+                          style={{
+                            color: markerColor,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {worker.status || "Safe"}
+                        </span>
+                      </div>
+
+                      <div>
+                        <b>Risk:</b>{" "}
+                        {Number(
+                          worker.riskScore || 0
+                        ).toFixed(1)}
+                      </div>
+
+                      <div>
+                        <b>Gas:</b>{" "}
+                        {Number(
+                          worker.gas || 0
+                        ).toFixed(1)}
+                        {" "}ppm
+                      </div>
+
+                      <div>
+                        <b>Temperature:</b>{" "}
+                        {Number(
+                          worker.temperature || 0
+                        ).toFixed(1)}
+                        °C
+                      </div>
+
+                      <div>
+                        <b>Motion:</b>{" "}
+                        {Number(
+                          worker.motion || 0
+                        ).toFixed(2)}
+                        g
+                      </div>
+
+                      <div>
+                        <b>Battery:</b>{" "}
+                        {Math.round(
+                          worker.battery || 0
+                        )}
+                        %
+                      </div>
+
+                      <div>
+                        <b>Signal:</b>{" "}
+                        {Math.round(
+                          worker.signal || 0
+                        )}
+                        %
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </Popup>
+
+              </CircleMarker>
+            );
+          })}
+
+
+          {/* MAP CONTROLS */}
+
+          <MapControls />
+
+        </MapContainer>
+
+
+        {/* ---------------------------------------- */}
+        {/* LIVE TRACKING */}
+        {/* ---------------------------------------- */}
+
+        <div className="pointer-events-none absolute left-3 top-3 z-[1000]">
+
+          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-[#0c121c]/90 px-3 py-2 backdrop-blur">
+
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+
+            <span className="text-[9px] font-medium text-slate-300">
+              LIVE TRACKING
+            </span>
+
+          </div>
+
         </div>
 
-        {/* Zone labels */}
-        <span className="absolute left-5 top-5 text-[9px] uppercase tracking-[0.15em] text-slate-700">
-          Zone A
-        </span>
 
-        <span className="absolute right-8 top-24 text-[9px] uppercase tracking-[0.15em] text-slate-700">
-          Zone B
-        </span>
+        {/* ---------------------------------------- */}
+        {/* ZONE LABELS */}
+        {/* ---------------------------------------- */}
 
-        <span className="absolute bottom-10 left-16 text-[9px] uppercase tracking-[0.15em] text-slate-700">
-          Zone C
-        </span>
+        <div className="pointer-events-none absolute left-[22%] top-[22%] z-[900]">
 
-        {/* Workers */}
-        {workers.map((worker) => (
-          <div
-            key={worker.id}
-            className="absolute"
-            style={{
-              left: worker.x,
-              top: worker.y,
-              transform: "translate(-50%, -50%)",
-            }}
-          >
-            <div
-              className={`absolute -inset-2 rounded-full opacity-20 blur-sm ${
-                worker.status === "critical"
-                  ? "bg-red-400"
-                  : worker.status === "warning"
-                  ? "bg-amber-400"
-                  : "bg-emerald-400"
-              }`}
-            />
+          <span className="rounded-md bg-[#0c121c]/70 px-2 py-1 text-[8px] font-semibold uppercase tracking-widest text-emerald-400/70">
+            Zone A
+          </span>
 
-            <div
-              className={`relative flex h-7 w-7 items-center justify-center rounded-full border-2 ${
-                worker.status === "critical"
-                  ? "border-red-400 bg-red-400/20"
-                  : worker.status === "warning"
-                  ? "border-amber-400 bg-amber-400/20"
-                  : "border-emerald-400 bg-emerald-400/20"
-              }`}
-            >
-              <MapPin
-                size={13}
-                className={
-                  worker.status === "critical"
-                    ? "text-red-400"
-                    : worker.status === "warning"
-                    ? "text-amber-400"
-                    : "text-emerald-400"
-                }
-              />
-            </div>
+        </div>
 
-            <span className="absolute left-1/2 top-8 -translate-x-1/2 whitespace-nowrap text-[8px] font-medium text-slate-500">
-              {worker.id}
-            </span>
-          </div>
-        ))}
 
-        {/* Route */}
-        <svg
-          className="absolute inset-0 h-full w-full"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M10 82 C25 70, 25 50, 42 52 S62 65, 78 35"
-            fill="none"
-            stroke="rgba(16,185,129,0.3)"
-            strokeWidth="0.5"
-            strokeDasharray="2 2"
+        <div className="pointer-events-none absolute right-[18%] top-[25%] z-[900]">
+
+          <span className="rounded-md bg-[#0c121c]/70 px-2 py-1 text-[8px] font-semibold uppercase tracking-widest text-amber-400/70">
+            Zone B
+          </span>
+
+        </div>
+
+
+        <div className="pointer-events-none absolute bottom-[24%] left-[28%] z-[900]">
+
+          <span className="rounded-md bg-[#0c121c]/70 px-2 py-1 text-[8px] font-semibold uppercase tracking-widest text-cyan-400/70">
+            Zone C
+          </span>
+
+        </div>
+
+
+        {/* ---------------------------------------- */}
+        {/* MAIN SHAFT */}
+        {/* ---------------------------------------- */}
+
+        <div className="absolute bottom-4 left-4 z-[1000] flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0c121c]/90 px-3 py-2 backdrop-blur">
+
+          <Navigation
+            size={12}
+            className="text-emerald-400"
           />
-        </svg>
 
-        {/* Bottom controls */}
-        <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#0c121c]/90 px-3 py-2 backdrop-blur">
-          <Navigation size={12} className="text-emerald-400" />
           <span className="text-[9px] text-slate-400">
             Main Shaft
           </span>
+
         </div>
 
-        <div className="absolute bottom-4 right-4 flex gap-3 rounded-lg border border-white/[0.06] bg-[#0c121c]/90 px-3 py-2 backdrop-blur">
+
+        {/* ---------------------------------------- */}
+        {/* LEGEND */}
+        {/* ---------------------------------------- */}
+
+        <div className="absolute bottom-4 right-4 z-[1000] flex gap-3 rounded-lg border border-white/[0.06] bg-[#0c121c]/90 px-3 py-2 backdrop-blur">
+
           <span className="flex items-center gap-1 text-[8px] text-slate-500">
+
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+
             Safe
+
           </span>
 
+
           <span className="flex items-center gap-1 text-[8px] text-slate-500">
+
             <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+
             Warning
+
           </span>
 
+
           <span className="flex items-center gap-1 text-[8px] text-slate-500">
+
             <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+
             Critical
+
           </span>
+
         </div>
+
       </div>
+
+
+      {/* FOOTER */}
+
+      <div className="mt-3 flex items-center justify-between">
+
+        <span className="text-[9px] text-slate-600">
+          {workers.length} workers tracked
+        </span>
+
+        <span className="flex items-center gap-1 text-[9px] text-emerald-400">
+
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+
+          Tracking active
+
+        </span>
+
+      </div>
+
     </div>
   );
 }

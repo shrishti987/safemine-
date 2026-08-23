@@ -1,4 +1,3 @@
-import { ref, onValue } from "firebase/database";
 import {
   createContext,
   useCallback,
@@ -9,7 +8,6 @@ import {
   useState,
 } from "react";
 
-import { database } from "../firebase";
 import workersRoster from "../data/workers";
 import zonesRoster from "../data/zones";
 
@@ -32,21 +30,39 @@ import {
 const HISTORY_LIMIT = 30;
 const TIMELINE_LIMIT = 20;
 
-const FIREBASE_PATH = "SafeMine";
-
 const MineDataContext = createContext(null);
-
-// =========================================================
-// HELPERS
-// =========================================================
 
 const clamp = (value, min, max) =>
   Math.min(Math.max(value, min), max);
+
+const meanRevert = (
+  current,
+  baseline,
+  amount,
+  decay = 0.85
+) =>
+  baseline +
+  (current - baseline) * decay +
+  (Math.random() * amount * 2 - amount);
+
+/*
+|--------------------------------------------------------------------------
+| BASELINE READINGS
+|--------------------------------------------------------------------------
+*/
 
 function buildBaselineReadings() {
   const readings = {};
 
   workersRoster.forEach((worker) => {
+    if (worker.id === PRIMARY_WORKER_ID) {
+      readings[worker.id] = {
+        ...getScenarioStage(0)[PRIMARY_WORKER_ID],
+      };
+
+      return;
+    }
+
     readings[worker.id] = {
       gas: worker.gas,
       temperature: worker.temperature,
@@ -56,15 +72,16 @@ function buildBaselineReadings() {
     };
   });
 
-  // Simulation starts with Aman Rawat's scripted baseline.
-  if (workersRoster.some((worker) => worker.id === PRIMARY_WORKER_ID)) {
-    readings[PRIMARY_WORKER_ID] = {
-      ...getScenarioStage(0)[PRIMARY_WORKER_ID],
-    };
-  }
-
   return readings;
 }
+
+const BASELINE_READINGS = buildBaselineReadings();
+
+/*
+|--------------------------------------------------------------------------
+| BASELINE HISTORY
+|--------------------------------------------------------------------------
+*/
 
 function buildBaselineHistory(readings, timestamp) {
   const history = {};
@@ -72,7 +89,7 @@ function buildBaselineHistory(readings, timestamp) {
   workersRoster.forEach((worker) => {
     history[worker.id] = [
       {
-        ...(readings[worker.id] || {}),
+        ...readings[worker.id],
         timestamp,
       },
     ];
@@ -80,6 +97,12 @@ function buildBaselineHistory(readings, timestamp) {
 
   return history;
 }
+
+/*
+|--------------------------------------------------------------------------
+| BASELINE TIMELINE
+|--------------------------------------------------------------------------
+*/
 
 function buildBaselineTimeline(timestamp) {
   const timeline = {};
@@ -98,124 +121,15 @@ function buildBaselineTimeline(timestamp) {
   return timeline;
 }
 
-// =========================================================
-// FIREBASE CONVERTER
-// =========================================================
-
-function convertFirebaseData(firebaseData, previous = {}) {
-  if (!firebaseData || typeof firebaseData !== "object") {
-    return previous;
-  }
-
-  const numberValue = (value, fallback) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-
-  const motionValue =
-    typeof firebaseData.motion === "boolean"
-      ? firebaseData.motion
-        ? 1
-        : 0
-      : numberValue(firebaseData.motion, previous.motion ?? 0);
-
-  return {
-    ...previous,
-
-    gas: numberValue(
-      firebaseData.gas,
-      previous.gas ?? 0
-    ),
-
-    temperature: numberValue(
-      firebaseData.temperature,
-      previous.temperature ?? 25
-    ),
-
-    motion: motionValue,
-
-    battery: numberValue(
-      firebaseData.battery,
-      previous.battery ?? 100
-    ),
-
-    signal: numberValue(
-      firebaseData.signal,
-      previous.signal ?? 100
-    ),
-
-    humidity:
-      firebaseData.humidity ??
-      previous.humidity ??
-      null,
-
-    pressure:
-      firebaseData.pressure ??
-      previous.pressure ??
-      null,
-
-    impact:
-      firebaseData.impact ??
-      previous.impact ??
-      false,
-
-    noMotion:
-      firebaseData.noMotion ??
-      previous.noMotion ??
-      false,
-
-    systemStatus:
-      firebaseData.systemStatus ??
-      previous.systemStatus ??
-      "ONLINE",
-
-    lastUpdate:
-      firebaseData.lastUpdate ??
-      previous.lastUpdate ??
-      null,
-
-    dhtOK:
-      firebaseData.dhtOK ??
-      previous.dhtOK ??
-      false,
-
-    bmpOK:
-      firebaseData.bmpOK ??
-      previous.bmpOK ??
-      false,
-
-    mpuOK:
-      firebaseData.mpuOK ??
-      previous.mpuOK ??
-      false,
-
-    acceleration:
-      firebaseData.acceleration ??
-      previous.acceleration ??
-      {
-        ax: 0,
-        ay: 0,
-        az: 0,
-      },
-
-    gyro:
-      firebaseData.gyro ??
-      previous.gyro ??
-      {
-        gx: 0,
-        gy: 0,
-        gz: 0,
-      },
-  };
-}
-
-// =========================================================
-// PROVIDER
-// =========================================================
+/*
+|--------------------------------------------------------------------------
+| PROVIDER
+|--------------------------------------------------------------------------
+*/
 
 export function MineDataProvider({ children }) {
-  const [readings, setReadings] = useState(() =>
-    buildBaselineReadings()
+  const [readings, setReadings] = useState(
+    buildBaselineReadings
   );
 
   const [history, setHistory] = useState(() =>
@@ -236,13 +150,7 @@ export function MineDataProvider({ children }) {
 
   const [stageIndex, setStageIndex] = useState(0);
 
-  const [firebaseConnected, setFirebaseConnected] =
-    useState(false);
-
-  const [firebaseData, setFirebaseData] =
-    useState(null);
-
-  const [riskHistory, setRiskHistory] = useState([
+  const [riskHistory, setRiskHistory] = useState(() => [
     {
       time: new Date().toLocaleTimeString("en-IN", {
         hour: "2-digit",
@@ -252,207 +160,148 @@ export function MineDataProvider({ children }) {
     },
   ]);
 
+  /*
+  |--------------------------------------------------------------------------
+  | TRACK PREVIOUS CONDITIONS
+  |--------------------------------------------------------------------------
+  */
+
   const previousBandRef = useRef({});
+
   const previousFactorKeysRef = useRef({});
 
-  // =========================================================
-  // FIREBASE REALTIME LISTENER
-  // =========================================================
+  // Tracks whether a worker was already in an uncertain/risk condition.
+  // This prevents the same condition from creating an alert every tick.
+  const previousUncertainRef = useRef({});
 
-  useEffect(() => {
-    console.log(
-      `🔥 Firebase listener started: ${FIREBASE_PATH}`
-    );
-
-    const firebaseRef = ref(
-      database,
-      FIREBASE_PATH
-    );
-
-    const unsubscribe = onValue(
-      firebaseRef,
-      (snapshot) => {
-        const data = snapshot.val();
-
-        console.log(
-          "🔥 Firebase realtime:",
-          data
-        );
-
-        if (!data) {
-          setFirebaseConnected(false);
-          setFirebaseData(null);
-          return;
-        }
-
-        setFirebaseConnected(true);
-        setFirebaseData(data);
-
-        // ---------------------------------------------------
-        // IMPORTANT:
-        // During simulation Firebase is NOT allowed to
-        // overwrite the scripted simulation values.
-        // ---------------------------------------------------
-
-        if (simulationActive) {
-          return;
-        }
-
-        // ---------------------------------------------------
-        // FIREBASE -> SM-004
-        // ---------------------------------------------------
-
-        setReadings((current) => {
-          const previous =
-            current[PRIMARY_WORKER_ID] || {};
-
-          const liveReading =
-            convertFirebaseData(
-              data,
-              previous
-            );
-
-          return {
-            ...current,
-            [PRIMARY_WORKER_ID]:
-              liveReading,
-          };
-        });
-      },
-      (error) => {
-        console.error(
-          "❌ Firebase listener error:",
-          error
-        );
-
-        setFirebaseConnected(false);
-      }
-    );
-
-    return () => {
-      console.log(
-        "🔌 Firebase listener stopped"
-      );
-
-      unsubscribe();
-    };
-  }, [simulationActive]);
-
-  // =========================================================
-  // FIREBASE HISTORY
-  // =========================================================
-
-  useEffect(() => {
-    if (
-      !firebaseConnected ||
-      !firebaseData ||
-      simulationActive
-    ) {
-      return;
-    }
-
-    const timestamp = Date.now();
-
-    setHistory((currentHistory) => {
-      const workerHistory =
-        currentHistory[PRIMARY_WORKER_ID] || [];
-
-      const currentReading =
-        readings[PRIMARY_WORKER_ID];
-
-      if (!currentReading) {
-        return currentHistory;
-      }
-
-      const lastReading =
-        workerHistory[
-          workerHistory.length - 1
-        ];
-
-      // Prevent identical readings from being added
-      // repeatedly without an actual Firebase change.
-      const importantKeys = [
-        "gas",
-        "temperature",
-        "motion",
-        "battery",
-        "signal",
-      ];
-
-      const changed =
-        !lastReading ||
-        importantKeys.some(
-          (key) =>
-            lastReading[key] !==
-            currentReading[key]
-        );
-
-      if (!changed) {
-        return currentHistory;
-      }
-
-      return {
-        ...currentHistory,
-
-        [PRIMARY_WORKER_ID]: [
-          ...workerHistory,
-          {
-            ...currentReading,
-            timestamp,
-          },
-        ].slice(-HISTORY_LIMIT),
-      };
-    });
-  }, [
-    firebaseData,
-    firebaseConnected,
-    simulationActive,
-    readings,
-  ]);
-
-  // =========================================================
-  // SIMULATION TICK
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | MAIN SENSOR TICK
+  |--------------------------------------------------------------------------
+  */
 
   const tick = useCallback(() => {
-    if (!simulationActive) {
-      return;
-    }
+    const nextStageIndex = simulationActive
+      ? Math.min(
+          stageIndex + 1,
+          STAGE_COUNT - 1
+        )
+      : stageIndex;
 
-    const nextStageIndex = Math.min(
-      stageIndex + 1,
-      STAGE_COUNT - 1
-    );
-
-    const scenario =
-      getScenarioStage(nextStageIndex);
+    const scenario = simulationActive
+      ? getScenarioStage(nextStageIndex)
+      : null;
 
     const timestamp = Date.now();
 
-    const nextReadings = {
-      ...readings,
-    };
+    const nextReadings = {};
 
-    // -------------------------------------------------------
-    // Only the two scripted workers change during simulation.
-    // Every other worker remains unchanged.
-    // -------------------------------------------------------
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE SENSOR READINGS
+    |--------------------------------------------------------------------------
+    */
 
-    nextReadings[PRIMARY_WORKER_ID] = {
-      ...scenario[PRIMARY_WORKER_ID],
-    };
+    workersRoster.forEach((worker) => {
+      const isScripted =
+        scenario &&
+        (
+          worker.id === PRIMARY_WORKER_ID ||
+          worker.id === SECONDARY_WORKER_ID
+        );
 
-    nextReadings[SECONDARY_WORKER_ID] = {
-      ...scenario[SECONDARY_WORKER_ID],
-    };
+      /*
+      |--------------------------------------------------------------
+      | Scripted simulation workers
+      |--------------------------------------------------------------
+      */
 
-    // -------------------------------------------------------
-    // HISTORY
-    // -------------------------------------------------------
+      if (isScripted) {
+        nextReadings[worker.id] = {
+          ...scenario[worker.id],
+        };
 
-    const nextHistory = {
-      ...history,
-    };
+        return;
+      }
+
+      /*
+      |--------------------------------------------------------------
+      | Normal workers
+      |--------------------------------------------------------------
+      */
+
+      const current = readings[worker.id];
+
+      const baseline =
+        BASELINE_READINGS[worker.id];
+
+      nextReadings[worker.id] = {
+        gas: Number(
+          clamp(
+            meanRevert(
+              current.gas,
+              baseline.gas,
+              6
+            ),
+            0,
+            1500
+          ).toFixed(1)
+        ),
+
+        temperature: Number(
+          clamp(
+            meanRevert(
+              current.temperature,
+              baseline.temperature,
+              0.25
+            ),
+            20,
+            55
+          ).toFixed(1)
+        ),
+
+        motion: Number(
+          clamp(
+            meanRevert(
+              current.motion,
+              baseline.motion,
+              0.015
+            ),
+            0,
+            1
+          ).toFixed(2)
+        ),
+
+        battery: Number(
+          clamp(
+            current.battery -
+              Math.random() * 0.1,
+            0,
+            100
+          ).toFixed(0)
+        ),
+
+        signal: Number(
+          clamp(
+            meanRevert(
+              current.signal,
+              baseline.signal,
+              1.2
+            ),
+            0,
+            100
+          ).toFixed(0)
+        ),
+      };
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE HISTORY
+    |--------------------------------------------------------------------------
+    */
+
+    const nextHistory = {};
 
     workersRoster.forEach((worker) => {
       const existing =
@@ -461,13 +310,20 @@ export function MineDataProvider({ children }) {
       nextHistory[worker.id] = [
         ...existing,
         {
-          ...(nextReadings[worker.id] || {}),
+          ...nextReadings[worker.id],
           timestamp,
         },
       ].slice(-HISTORY_LIMIT);
     });
 
+    /*
+    |--------------------------------------------------------------------------
+    | ALERT + TIMELINE STORAGE
+    |--------------------------------------------------------------------------
+    */
+
     const newAlerts = [];
+
     const timelineAdditions = {};
 
     const pushTimeline = (
@@ -477,29 +333,38 @@ export function MineDataProvider({ children }) {
       timelineAdditions[workerId] =
         timelineAdditions[workerId] || [];
 
-      timelineAdditions[workerId].push(entry);
+      timelineAdditions[workerId].push(
+        entry
+      );
     };
 
     let totalSafetyScore = 0;
 
-    // -------------------------------------------------------
-    // RISK
-    // -------------------------------------------------------
+    /*
+    |--------------------------------------------------------------------------
+    | CALCULATE RISK FOR EVERY WORKER
+    |--------------------------------------------------------------------------
+    */
 
     workersRoster.forEach((worker) => {
       const workerWithReading = {
         ...worker,
-        ...(nextReadings[worker.id] || {}),
+        ...nextReadings[worker.id],
       };
 
-      const risk =
-        computeWorkerRisk(
-          workerWithReading,
-          nextHistory[worker.id] || []
-        );
+      const risk = computeWorkerRisk(
+        workerWithReading,
+        nextHistory[worker.id]
+      );
 
       totalSafetyScore +=
         risk.safetyScore;
+
+      /*
+      |--------------------------------------------------------------------------
+      | PREVIOUS STATE
+      |--------------------------------------------------------------------------
+      */
 
       const previousBand =
         previousBandRef.current[
@@ -516,7 +381,30 @@ export function MineDataProvider({ children }) {
           (factor) => factor.key
         );
 
-      // New risk factors
+      /*
+      |--------------------------------------------------------------------------
+      | UNCERTAIN CONDITION
+      |--------------------------------------------------------------------------
+      |
+      | Any active risk factor means the worker
+      | currently has an uncertain condition.
+      |
+      */
+
+      const isUncertain =
+        risk.isUncertain === true;
+
+      const wasUncertain =
+        previousUncertainRef.current[
+          worker.id
+        ] || false;
+
+      /*
+      |--------------------------------------------------------------------------
+      | TIMELINE FOR NEW FACTORS
+      |--------------------------------------------------------------------------
+      */
+
       risk.factors
         .filter(
           (factor) =>
@@ -525,92 +413,122 @@ export function MineDataProvider({ children }) {
             )
         )
         .forEach((factor) => {
-          pushTimeline(
-            worker.id,
-            {
-              id: `${worker.id}-${timestamp}-${factor.key}`,
-              time: timestamp,
-              icon:
-                risk.band ===
-                SAFETY_BANDS.CRITICAL
-                  ? "🔴"
-                  : "🟡",
-              label: factor.reason,
-            }
-          );
+          pushTimeline(worker.id, {
+            id: `${worker.id}-${timestamp}-${factor.key}`,
+
+            time: timestamp,
+
+            icon:
+              risk.band ===
+              SAFETY_BANDS.CRITICAL
+                ? "🔴"
+                : "🟡",
+
+            label: factor.reason,
+          });
         });
 
-      // Moderate / High
-      const enteringModerateOrHigh =
-        risk.band !== previousBand &&
-        (
-          risk.band ===
-            SAFETY_BANDS.MODERATE ||
-          risk.band ===
-            SAFETY_BANDS.HIGH
-        ) &&
-        risk.band !==
-          SAFETY_BANDS.CRITICAL;
+      /*
+      |--------------------------------------------------------------------------
+      | NEW UNCERTAIN CONDITION ALERT
+      |--------------------------------------------------------------------------
+      |
+      | Whenever ANY risk factor appears for
+      | the first time, generate an alert.
+      |
+      */
 
-      if (enteringModerateOrHigh) {
+      const newUncertainCondition =
+        isUncertain && !wasUncertain;
+
+      if (newUncertainCondition) {
+        const alertType =
+          risk.band ===
+          SAFETY_BANDS.CRITICAL
+            ? "Critical"
+            : risk.band ===
+              SAFETY_BANDS.HIGH
+              ? "High"
+              : "Warning";
+
+        const alertTitle =
+          risk.band ===
+          SAFETY_BANDS.CRITICAL
+            ? "Critical safety condition"
+            : risk.band ===
+              SAFETY_BANDS.HIGH
+              ? "High risk condition detected"
+              : "Uncertain condition detected";
+
         const alert = {
-          id:
-            `ALT-${timestamp}-${worker.id}-pred`,
+          id: `ALT-${timestamp}-${worker.id}-uncertain`,
 
           kind: "predictive",
 
-          type:
-            risk.band ===
-            SAFETY_BANDS.HIGH
-              ? "High"
-              : "Warning",
+          type: alertType,
 
-          title:
-            risk.band ===
-            SAFETY_BANDS.HIGH
-              ? "Risk escalating"
-              : "Early Warning",
+          title: alertTitle,
 
           message:
             risk.explanation[0] ||
-            `${worker.name}'s readings are trending toward unsafe levels.`,
+            `${worker.name}'s sensor readings indicate an uncertain safety condition.`,
 
           worker: worker.name,
+
           workerId: worker.id,
+
           zone: worker.zone,
+
           time: timestamp,
+
           acknowledged: false,
         };
 
         newAlerts.push(alert);
 
-        pushTimeline(
-          worker.id,
-          {
-            id: `${alert.id}-tl`,
-            time: timestamp,
-            icon: "🟡",
-            label:
-              risk.band ===
-              SAFETY_BANDS.HIGH
-                ? "Risk escalating"
-                : "Early warning generated",
-          }
-        );
+        pushTimeline(worker.id, {
+          id: `${alert.id}-tl`,
+
+          time: timestamp,
+
+          icon:
+            risk.band ===
+            SAFETY_BANDS.CRITICAL
+              ? "🔴"
+              : risk.band ===
+                SAFETY_BANDS.HIGH
+                ? "🟠"
+                : "🟡",
+
+          label:
+            risk.band ===
+            SAFETY_BANDS.CRITICAL
+              ? "Critical safety condition detected"
+              : "Uncertain safety condition detected",
+        });
       }
 
-      // Critical
+      /*
+      |--------------------------------------------------------------------------
+      | CRITICAL ALERT
+      |--------------------------------------------------------------------------
+      |
+      | Keep a dedicated critical alert as well.
+      |
+      */
+
       if (
         risk.band ===
           SAFETY_BANDS.CRITICAL &&
         previousBand !==
-          SAFETY_BANDS.CRITICAL
+          SAFETY_BANDS.CRITICAL &&
+        !newUncertainCondition
       ) {
         const alert = {
-          id:
-            `ALT-${timestamp}-${worker.id}-crit`,
+          id: `ALT-${timestamp}-${worker.id}-crit`,
 
           kind: "current",
+
           type: "Critical",
 
           title:
@@ -623,34 +541,44 @@ export function MineDataProvider({ children }) {
             "Multiple safety thresholds exceeded.",
 
           worker: worker.name,
+
           workerId: worker.id,
+
           zone: worker.zone,
+
           time: timestamp,
+
           acknowledged: false,
         };
 
         newAlerts.push(alert);
 
-        pushTimeline(
-          worker.id,
-          {
-            id: `${alert.id}-tl-1`,
-            time: timestamp,
-            icon: "🔴",
-            label: "High risk detected",
-          }
-        );
+        pushTimeline(worker.id, {
+          id: `${alert.id}-tl-1`,
 
-        pushTimeline(
-          worker.id,
-          {
-            id: `${alert.id}-tl-2`,
-            time: timestamp,
-            icon: "🚨",
-            label: "Critical alert generated",
-          }
-        );
+          time: timestamp,
+
+          icon: "🔴",
+
+          label: "High risk detected",
+        });
+
+        pushTimeline(worker.id, {
+          id: `${alert.id}-tl-2`,
+
+          time: timestamp,
+
+          icon: "🚨",
+
+          label: "Critical alert generated",
+        });
       }
+
+      /*
+      |--------------------------------------------------------------------------
+      | SAVE CURRENT STATE
+      |--------------------------------------------------------------------------
+      */
 
       previousBandRef.current[
         worker.id
@@ -659,50 +587,63 @@ export function MineDataProvider({ children }) {
       previousFactorKeysRef.current[
         worker.id
       ] = currentFactorKeys;
+
+      previousUncertainRef.current[
+        worker.id
+      ] = isUncertain;
     });
 
-    // -------------------------------------------------------
-    // STATE
-    // -------------------------------------------------------
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE READINGS + HISTORY
+    |--------------------------------------------------------------------------
+    */
 
     setReadings(nextReadings);
+
     setHistory(nextHistory);
 
-    // -------------------------------------------------------
-    // RISK HISTORY
-    // -------------------------------------------------------
+    /*
+    |--------------------------------------------------------------------------
+    | OVERALL RISK HISTORY
+    |--------------------------------------------------------------------------
+    */
 
     const averageSafetyScore =
       totalSafetyScore /
       workersRoster.length;
 
-    setRiskHistory((current) => [
-      ...current,
-      {
-        time:
-          new Date(timestamp).toLocaleTimeString(
-            "en-IN",
-            {
-              hour: "2-digit",
-              minute: "2-digit",
-            }
-          ),
+    setRiskHistory((current) => {
+      const point = {
+        time: new Date(
+          timestamp
+        ).toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+
         score: Number(
           (
             averageSafetyScore / 10
           ).toFixed(1)
         ),
-      },
-    ].slice(-20));
+      };
 
-    // -------------------------------------------------------
-    // TIMELINE
-    // -------------------------------------------------------
+      return [
+        ...current,
+        point,
+      ].slice(-20);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE TIMELINE
+    |--------------------------------------------------------------------------
+    */
 
     if (
-      Object.keys(
-        timelineAdditions
-      ).length > 0
+      Object.keys(timelineAdditions)
+        .length > 0
     ) {
       setTimeline((current) => {
         const merged = {
@@ -714,7 +655,8 @@ export function MineDataProvider({ children }) {
         ).forEach(
           ([workerId, entries]) => {
             merged[workerId] = [
-              ...(current[workerId] || []),
+              ...(current[workerId] ||
+                []),
               ...entries,
             ].slice(-TIMELINE_LIMIT);
           }
@@ -724,9 +666,11 @@ export function MineDataProvider({ children }) {
       });
     }
 
-    // -------------------------------------------------------
-    // ALERTS
-    // -------------------------------------------------------
+    /*
+    |--------------------------------------------------------------------------
+    | ADD ALERTS
+    |--------------------------------------------------------------------------
+    */
 
     if (newAlerts.length > 0) {
       setAlerts((current) =>
@@ -737,25 +681,31 @@ export function MineDataProvider({ children }) {
       );
     }
 
-    setStageIndex(
-      nextStageIndex
-    );
+    /*
+    |--------------------------------------------------------------------------
+    | ADVANCE SIMULATION
+    |--------------------------------------------------------------------------
+    */
+
+    if (simulationActive) {
+      setStageIndex(
+        nextStageIndex
+      );
+    }
   }, [
-    simulationActive,
-    stageIndex,
     readings,
     history,
+    simulationActive,
+    stageIndex,
   ]);
 
-  // =========================================================
-  // SIMULATION INTERVAL
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | SENSOR UPDATE TIMER
+  |--------------------------------------------------------------------------
+  */
 
   useEffect(() => {
-    if (!simulationActive) {
-      return;
-    }
-
     const interval = setInterval(
       tick,
       TICK_INTERVAL_MS
@@ -763,21 +713,21 @@ export function MineDataProvider({ children }) {
 
     return () =>
       clearInterval(interval);
-  }, [
-    simulationActive,
-    tick,
-  ]);
+  }, [tick]);
 
-  // =========================================================
-  // RESET
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | RESET
+  |--------------------------------------------------------------------------
+  */
 
   const resetToBaseline =
     useCallback(() => {
       const baseline =
         buildBaselineReadings();
 
-      const timestamp = Date.now();
+      const timestamp =
+        Date.now();
 
       setReadings(baseline);
 
@@ -800,80 +750,77 @@ export function MineDataProvider({ children }) {
 
       setRiskHistory([
         {
-          time:
-            new Date(timestamp).toLocaleTimeString(
-              "en-IN",
-              {
-                hour: "2-digit",
-                minute: "2-digit",
-              }
-            ),
+          time: new Date(
+            timestamp
+          ).toLocaleTimeString(
+            "en-IN",
+            {
+              hour: "2-digit",
+              minute: "2-digit",
+            }
+          ),
+
           score: 2.0,
         },
       ]);
 
       previousBandRef.current = {};
-      previousFactorKeysRef.current = {};
+
+      previousFactorKeysRef.current =
+        {};
+
+      previousUncertainRef.current =
+        {};
     }, []);
 
-  // =========================================================
-  // START SIMULATION
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | SIMULATION CONTROLS
+  |--------------------------------------------------------------------------
+  */
 
   const startSimulation =
     useCallback(() => {
       resetToBaseline();
-
       setSimulationActive(true);
-    }, [
-      resetToBaseline,
-    ]);
-
-  // =========================================================
-  // STOP SIMULATION
-  // =========================================================
+    }, [resetToBaseline]);
 
   const stopSimulation =
     useCallback(() => {
       setSimulationActive(false);
     }, []);
 
-  // =========================================================
-  // RESET SIMULATION
-  // =========================================================
-
   const resetSimulation =
     useCallback(() => {
       setSimulationActive(false);
       resetToBaseline();
-    }, [
-      resetToBaseline,
-    ]);
+    }, [resetToBaseline]);
 
-  // =========================================================
-  // ACKNOWLEDGE ALERT
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | ACKNOWLEDGE ALERT
+  |--------------------------------------------------------------------------
+  */
 
   const acknowledgeAlert =
-    useCallback(
-      (alertId) => {
-        setAlerts((current) =>
-          current.map((alert) =>
-            alert.id === alertId
-              ? {
-                  ...alert,
-                  acknowledged: true,
-                }
-              : alert
-          )
-        );
-      },
-      []
-    );
+    useCallback((alertId) => {
+      setAlerts((current) =>
+        current.map((alert) =>
+          alert.id === alertId
+            ? {
+                ...alert,
+                acknowledged: true,
+              }
+            : alert
+        )
+      );
+    }, []);
 
-  // =========================================================
-  // ENRICHED WORKERS
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | ENRICHED WORKERS
+  |--------------------------------------------------------------------------
+  */
 
   const enrichedWorkers =
     useMemo(
@@ -882,15 +829,14 @@ export function MineDataProvider({ children }) {
           (worker) => {
             const workerWithReading = {
               ...worker,
-              ...(readings[worker.id] || {}),
+              ...readings[worker.id],
             };
 
             const risk =
               computeWorkerRisk(
                 workerWithReading,
-                history[
-                  worker.id
-                ] || []
+                history[worker.id] ||
+                  []
               );
 
             return {
@@ -899,202 +845,203 @@ export function MineDataProvider({ children }) {
             };
           }
         ),
-      [
-        readings,
-        history,
-      ]
+      [readings, history]
     );
 
-  // =========================================================
-  // ZONES
-  // =========================================================
+  /*
+  |--------------------------------------------------------------------------
+  | ZONE RISK
+  |--------------------------------------------------------------------------
+  */
 
-  const zones =
-    useMemo(
-      () =>
-        zonesRoster.map(
-          (zone) => {
-            const zoneWorkers =
-              enrichedWorkers.filter(
-                (worker) =>
-                  worker.zone ===
-                  zone.id
-              );
+  const zones = useMemo(
+    () =>
+      zonesRoster.map((zone) => {
+        const zoneWorkers =
+          enrichedWorkers.filter(
+            (worker) =>
+              worker.zone === zone.id
+          );
 
-            return {
-              ...zone,
-              ...computeZoneRisk(
-                zone.id,
-                zoneWorkers
-              ),
-            };
-          }
+        return {
+          ...zone,
+          ...computeZoneRisk(
+            zone.id,
+            zoneWorkers
+          ),
+        };
+      }),
+    [enrichedWorkers]
+  );
+
+  /*
+  |--------------------------------------------------------------------------
+  | STATISTICS
+  |--------------------------------------------------------------------------
+  */
+
+  const statistics = useMemo(() => {
+    const sortedByRisk = [
+      ...enrichedWorkers,
+    ].sort(
+      (a, b) =>
+        b.safetyScore -
+        a.safetyScore
+    );
+
+    const sortedZonesByRisk = [
+      ...zones,
+    ].sort(
+      (a, b) =>
+        b.safetyScore -
+        a.safetyScore
+    );
+
+    const averageSafetyScore =
+      enrichedWorkers.length > 0
+        ? enrichedWorkers.reduce(
+            (total, worker) =>
+              total +
+              worker.safetyScore,
+            0
+          ) /
+          enrichedWorkers.length
+        : 0;
+
+    return {
+      totalWorkers:
+        enrichedWorkers.length,
+
+      safeWorkers:
+        enrichedWorkers.filter(
+          (worker) =>
+            worker.status ===
+            "Safe"
+        ).length,
+
+      atRiskWorkers:
+        enrichedWorkers.filter(
+          (worker) =>
+            worker.status ===
+            "Warning"
+        ).length,
+
+      criticalWorkers:
+        enrichedWorkers.filter(
+          (worker) =>
+            worker.status ===
+            "Critical"
+        ).length,
+
+      activeAlerts:
+        alerts.filter(
+          (alert) =>
+            !alert.acknowledged
+        ).length,
+
+      highRiskZones:
+        zones.filter(
+          (zone) =>
+            zone.band ===
+              SAFETY_BANDS.HIGH ||
+            zone.band ===
+              SAFETY_BANDS.CRITICAL
+        ).length,
+
+      highestRiskWorker:
+        sortedByRisk[0] || null,
+
+      highestRiskZone:
+        sortedZonesByRisk[0] ||
+        null,
+
+      overallSafetyScore:
+        Math.round(
+          averageSafetyScore
         ),
-      [enrichedWorkers]
-    );
 
-  // =========================================================
-  // STATISTICS
-  // =========================================================
+      overallRiskScore:
+        Number(
+          (
+            averageSafetyScore /
+            10
+          ).toFixed(1)
+        ),
 
-  const statistics =
-    useMemo(() => {
-      const sortedByRisk =
-        [...enrichedWorkers].sort(
-          (a, b) =>
-            b.safetyScore -
-            a.safetyScore
-        );
+      overallBand:
+        getBandFromScore(
+          averageSafetyScore
+        ),
+    };
+  }, [
+    enrichedWorkers,
+    zones,
+    alerts,
+  ]);
 
-      const sortedZonesByRisk =
-        [...zones].sort(
-          (a, b) =>
-            b.safetyScore -
-            a.safetyScore
-        );
+  /*
+  |--------------------------------------------------------------------------
+  | CONTEXT VALUE
+  |--------------------------------------------------------------------------
+  */
 
-      const averageSafetyScore =
-        enrichedWorkers.length > 0
-          ? enrichedWorkers.reduce(
-              (total, worker) =>
-                total +
-                worker.safetyScore,
-              0
-            ) /
-            enrichedWorkers.length
-          : 0;
+  const value = useMemo(
+    () => ({
+      workers:
+        enrichedWorkers,
 
-      return {
-        totalWorkers:
-          enrichedWorkers.length,
+      zones,
 
-        safeWorkers:
-          enrichedWorkers.filter(
-            (worker) =>
-              worker.status === "Safe"
-          ).length,
+      alerts,
 
-        atRiskWorkers:
-          enrichedWorkers.filter(
-            (worker) =>
-              worker.status === "Warning"
-          ).length,
+      history,
 
-        criticalWorkers:
-          enrichedWorkers.filter(
-            (worker) =>
-              worker.status === "Critical"
-          ).length,
+      timeline,
 
-        activeAlerts:
-          alerts.filter(
-            (alert) =>
-              !alert.acknowledged
-          ).length,
+      riskHistory,
 
-        highRiskZones:
-          zones.filter(
-            (zone) =>
-              zone.band ===
-                SAFETY_BANDS.HIGH ||
-              zone.band ===
-                SAFETY_BANDS.CRITICAL
-          ).length,
+      statistics,
 
-        highestRiskWorker:
-          sortedByRisk[0] || null,
+      simulation: {
+        active:
+          simulationActive,
 
-        highestRiskZone:
-          sortedZonesByRisk[0] || null,
+        stage:
+          stageIndex,
 
-        overallSafetyScore:
-          Math.round(
-            averageSafetyScore
+        stageCount:
+          STAGE_COUNT,
+
+        isFinalStage:
+          isFinalStage(
+            stageIndex
           ),
+      },
 
-        overallRiskScore:
-          Number(
-            (
-              averageSafetyScore / 10
-            ).toFixed(1)
-          ),
+      startSimulation,
 
-        overallBand:
-          getBandFromScore(
-            averageSafetyScore
-          ),
-      };
-    }, [
+      stopSimulation,
+
+      resetSimulation,
+
+      acknowledgeAlert,
+    }),
+    [
       enrichedWorkers,
       zones,
       alerts,
-    ]);
-
-  // =========================================================
-  // CONTEXT VALUE
-  // =========================================================
-
-  const value =
-    useMemo(
-      () => ({
-        workers: enrichedWorkers,
-        zones,
-        alerts,
-        history,
-        timeline,
-        riskHistory,
-        statistics,
-
-        firebase: {
-          connected:
-            firebaseConnected,
-
-          data:
-            firebaseData,
-
-          path:
-            FIREBASE_PATH,
-        },
-
-        simulation: {
-          active:
-            simulationActive,
-
-          stage:
-            stageIndex,
-
-          stageCount:
-            STAGE_COUNT,
-
-          isFinalStage:
-            isFinalStage(
-              stageIndex
-            ),
-        },
-
-        startSimulation,
-        stopSimulation,
-        resetSimulation,
-        acknowledgeAlert,
-      }),
-      [
-        enrichedWorkers,
-        zones,
-        alerts,
-        history,
-        timeline,
-        riskHistory,
-        statistics,
-        firebaseConnected,
-        firebaseData,
-        simulationActive,
-        stageIndex,
-        startSimulation,
-        stopSimulation,
-        resetSimulation,
-        acknowledgeAlert,
-      ]
-    );
+      history,
+      timeline,
+      riskHistory,
+      statistics,
+      simulationActive,
+      stageIndex,
+      startSimulation,
+      stopSimulation,
+      resetSimulation,
+      acknowledgeAlert,
+    ]
+  );
 
   return (
     <MineDataContext.Provider
@@ -1105,9 +1052,11 @@ export function MineDataProvider({ children }) {
   );
 }
 
-// =========================================================
-// HOOK
-// =========================================================
+/*
+|--------------------------------------------------------------------------
+| HOOK
+|--------------------------------------------------------------------------
+*/
 
 export function useMineContext() {
   const context =
