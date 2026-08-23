@@ -13,6 +13,7 @@ function EmergencyPanel({
   onAcknowledge,
   onDismiss,
   onEmergencyAction,
+  
 }) {
   const criticalAlerts = alerts.filter((alert) => {
     const severity =
