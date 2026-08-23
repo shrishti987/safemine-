@@ -36,6 +36,7 @@ const alertConfig = {
 
   Medium: {
     icon: AlertTriangle,
+    
     text: "text-amber-400",
     bg: "bg-amber-400/10",
     border: "border-amber-400/20",
