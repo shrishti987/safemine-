@@ -27,6 +27,10 @@ import {
   isFinalStage,
 } from "../utils/simulationScenario";
 
+/* Firebase */
+import { onValue, ref } from "firebase/database";
+import { database } from "../firebase";
+
 const HISTORY_LIMIT = 30;
 const TIMELINE_LIMIT = 20;
 
@@ -162,6 +166,62 @@ export function MineDataProvider({ children }) {
 
   /*
   |--------------------------------------------------------------------------
+  | FIREBASE LIVE DATA
+  |--------------------------------------------------------------------------
+  */
+
+  const [firebaseData, setFirebaseData] =
+    useState({});
+
+  const [firebaseConnected, setFirebaseConnected] =
+    useState(false);
+
+  /*
+  |--------------------------------------------------------------------------
+  | FIREBASE REAL-TIME LISTENER
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    const sensorRef = ref(
+      database,
+      "SafeMine"
+    );
+
+    const unsubscribe = onValue(
+      sensorRef,
+      (snapshot) => {
+        const data = snapshot.val();
+
+        console.log(
+          "🔥 Firebase Live Data:",
+          data
+        );
+
+        if (data !== null) {
+          setFirebaseData(data);
+          setFirebaseConnected(true);
+        } else {
+          setFirebaseData({});
+          setFirebaseConnected(false);
+        }
+      },
+      (error) => {
+        console.error(
+          "❌ Firebase read error:",
+          error
+        );
+
+        setFirebaseData({});
+        setFirebaseConnected(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  /*
+  |--------------------------------------------------------------------------
   | TRACK PREVIOUS CONDITIONS
   |--------------------------------------------------------------------------
   */
@@ -170,8 +230,6 @@ export function MineDataProvider({ children }) {
 
   const previousFactorKeysRef = useRef({});
 
-  // Tracks whether a worker was already in an uncertain/risk condition.
-  // This prevents the same condition from creating an alert every tick.
   const previousUncertainRef = useRef({});
 
   /*
@@ -385,10 +443,6 @@ export function MineDataProvider({ children }) {
       |--------------------------------------------------------------------------
       | UNCERTAIN CONDITION
       |--------------------------------------------------------------------------
-      |
-      | Any active risk factor means the worker
-      | currently has an uncertain condition.
-      |
       */
 
       const isUncertain =
@@ -432,10 +486,6 @@ export function MineDataProvider({ children }) {
       |--------------------------------------------------------------------------
       | NEW UNCERTAIN CONDITION ALERT
       |--------------------------------------------------------------------------
-      |
-      | Whenever ANY risk factor appears for
-      | the first time, generate an alert.
-      |
       */
 
       const newUncertainCondition =
@@ -512,9 +562,6 @@ export function MineDataProvider({ children }) {
       |--------------------------------------------------------------------------
       | CRITICAL ALERT
       |--------------------------------------------------------------------------
-      |
-      | Keep a dedicated critical alert as well.
-      |
       */
 
       if (
@@ -987,6 +1034,29 @@ export function MineDataProvider({ children }) {
 
   const value = useMemo(
     () => ({
+      /*
+      |--------------------------------------------------------------------------
+      | FIREBASE DATA
+      |--------------------------------------------------------------------------
+      */
+
+      firebase: {
+        connected:
+          firebaseConnected,
+
+        data:
+          firebaseData,
+
+        path:
+          "SafeMine",
+      },
+
+      /*
+      |--------------------------------------------------------------------------
+      | EXISTING DATA
+      |--------------------------------------------------------------------------
+      */
+
       workers:
         enrichedWorkers,
 
@@ -1001,6 +1071,12 @@ export function MineDataProvider({ children }) {
       riskHistory,
 
       statistics,
+
+      /*
+      |--------------------------------------------------------------------------
+      | SIMULATION
+      |--------------------------------------------------------------------------
+      */
 
       simulation: {
         active:
@@ -1018,6 +1094,12 @@ export function MineDataProvider({ children }) {
           ),
       },
 
+      /*
+      |--------------------------------------------------------------------------
+      | CONTROLS
+      |--------------------------------------------------------------------------
+      */
+
       startSimulation,
 
       stopSimulation,
@@ -1027,6 +1109,9 @@ export function MineDataProvider({ children }) {
       acknowledgeAlert,
     }),
     [
+      firebaseData,
+      firebaseConnected,
+
       enrichedWorkers,
       zones,
       alerts,
@@ -1034,8 +1119,10 @@ export function MineDataProvider({ children }) {
       timeline,
       riskHistory,
       statistics,
+
       simulationActive,
       stageIndex,
+
       startSimulation,
       stopSimulation,
       resetSimulation,
